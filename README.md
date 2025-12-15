@@ -246,7 +246,7 @@ maas-automation --help
 ============================================================
 MAAS AUTOMATION SDK
 ============================================================
-API URL: https://10.81.31.31:5240/MAAS
+API URL: https://<MAAS_URI>:5240/MAAS
 Actions: create_machine, commission, deploy
 
 ============================================================
