@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""CLI interface for MAAS automation"""
+import argparse
+import json
+import logging
+import sys
+from .controller import Controller
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+log = logging.getLogger("maas_automation")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="MAAS Automation SDK - Orchestrate machine lifecycle operations",
+        epilog="Examples:\n"
+               "  maas-automation -i config.json\n"
+               "  maas-automation -i config.json -a commission --hosts node01,node02\n"
+               "  maas-automation -i config.json -a deploy --hosts node01\n"
+               "  maas-automation -i config.json -a list\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        '-i', '--input',
+        required=True,
+        help='Path to JSON configuration file'
+    )
+    parser.add_argument(
+        '-a', '--action',
+        help='Action to perform (overrides config): list, commission, deploy, release, delete, etc.'
+    )
+    parser.add_argument(
+        '--hosts',
+        help='Comma-separated list of hostnames to target (e.g., "node01,node02" or "all")'
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Enable verbose logging'
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Print configuration without executing (not yet implemented)'
+    )
+    
+    args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    # Load configuration
+    try:
+        with open(args.input, 'r') as f:
+            cfg = json.load(f)
+    except FileNotFoundError:
+        log.error(f"Configuration file not found: {args.input}")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        log.error(f"Invalid JSON in configuration file: {e}")
+        sys.exit(1)
+
+    # Validate required fields
+    if 'maas_api_url' not in cfg:
+        log.error("Missing 'maas_api_url' in configuration")
+        sys.exit(1)
+    if 'maas_api_key' not in cfg:
+        log.error("Missing 'maas_api_key' in configuration")
+        sys.exit(1)
+
+    # Override action if specified on command line
+    if args.action:
+        cfg['actions'] = [args.action]
+        log.debug(f"Action overridden via CLI: {args.action}")
+
+    # Filter machines by hostname if specified
+    if args.hosts and args.hosts.lower() != 'all':
+        target_hosts = [h.strip().lower() for h in args.hosts.split(',')]
+        original_machines = cfg.get('machines', [])
+        
+        if original_machines:
+            filtered_machines = [
+                m for m in original_machines 
+                if m.get('hostname', '').lower() in target_hosts
+            ]
+            
+            if not filtered_machines:
+                log.error(f"No machines found matching hostnames: {args.hosts}")
+                log.info(f"Available machines: {', '.join([m.get('hostname', '?') for m in original_machines])}")
+                sys.exit(1)
+            
+            cfg['machines'] = filtered_machines
+            log.debug(f"Filtered to {len(filtered_machines)} machine(s): {', '.join([m.get('hostname') for m in filtered_machines])}")
+
+    # Initialize controller
+    api_url = cfg['maas_api_url']
+    api_key = cfg['maas_api_key']
+    
+    log.info("=" * 60)
+    log.info("MAAS AUTOMATION SDK")
+    log.info("=" * 60)
+    log.info(f"API URL: {api_url}")
+    log.info(f"Actions: {', '.join(cfg.get('actions', []))}")
+    if args.hosts:
+        log.info(f"Target Hosts: {args.hosts}")
+    log.info("")
+
+    try:
+        controller = Controller(api_url, api_key)
+        
+        # Special action: list machines
+        if 'list' in cfg.get('actions', []):
+            controller.list_machines()
+            sys.exit(0)
+        
+        system_ids = controller.execute_workflow(cfg)
+        
+        log.info("\n" + "=" * 60)
+        if system_ids:
+            log.info(f"✓ Workflow complete. Processed {len(system_ids)} machine(s)")
+            for sid in system_ids:
+                log.info(f"  - {sid}")
+        else:
+            log.info("✓ Workflow complete.")
+        log.info("=" * 60)
+        
+        sys.exit(0)
+
+    except KeyboardInterrupt:
+        log.warning("\n\nInterrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        log.error(f"\n\nWorkflow failed: {e}", exc_info=args.verbose)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

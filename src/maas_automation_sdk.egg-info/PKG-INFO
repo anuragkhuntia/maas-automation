@@ -1,0 +1,60 @@
+Metadata-Version: 2.4
+Name: maas-automation-sdk
+Version: 0.1.0
+Summary: MAAS automation SDK: create/commission/configure/deploy/release/delete machines via MAAS API
+Author: MAAS Automation Team
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.30
+Requires-Dist: Jinja2>=3.1
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: black>=23.0; extra == "dev"
+Requires-Dist: mypy>=1.0; extra == "dev"
+
+# MAAS Automation SDK
+
+Production-ready, modular Python SDK for MAAS automation with state polling and complete lifecycle management.
+
+## Features
+
+- **Machine lifecycle**: create, commission, deploy, release, delete
+- **Storage configuration**: Curtin-based storage layout with LVM
+- **State polling**: Wait for operations to complete with configurable timeouts
+- **JSON-driven**: Configure entire workflows via JSON
+- **Modular**: Clean separation of concerns across managers
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+```bash
+maas-automation -i example_input.json
+```
+
+## Example workflow
+
+1. Create/find machine by hostname
+2. Set power parameters (IPMI)
+3. Commission with optional custom scripts
+4. Configure storage layout (Curtin YAML)
+5. Deploy OS
+6. Release and wipe disks
+7. Delete machine
+
+## Configuration
+
+See `example_input.json` for a complete configuration example.
+
+## Architecture
+
+- `client.py`: MAAS API client with OAuth PLAINTEXT
+- `utils.py`: Retry logic and state polling
+- `machine.py`: Machine operations and lifecycle
+- `storage.py`: Storage layout rendering (Curtin)
+- `controller.py`: Orchestration layer
+- `cli.py`: Command-line interface

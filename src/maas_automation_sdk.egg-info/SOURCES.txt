@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/maas_automation/__init__.py
+src/maas_automation/bios.py
+src/maas_automation/boot.py
+src/maas_automation/cli.py
+src/maas_automation/client.py
+src/maas_automation/controller.py
+src/maas_automation/machine.py
+src/maas_automation/storage.py
+src/maas_automation/utils.py
+src/maas_automation_sdk.egg-info/PKG-INFO
+src/maas_automation_sdk.egg-info/SOURCES.txt
+src/maas_automation_sdk.egg-info/dependency_links.txt
+src/maas_automation_sdk.egg-info/entry_points.txt
+src/maas_automation_sdk.egg-info/requires.txt
+src/maas_automation_sdk.egg-info/top_level.txt

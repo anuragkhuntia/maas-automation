@@ -1,0 +1,2 @@
+[console_scripts]
+maas-automation = maas_automation.cli:main

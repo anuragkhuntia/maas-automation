@@ -1,0 +1,7 @@
+requests>=2.30
+Jinja2>=3.1
+
+[dev]
+pytest>=7.0
+black>=23.0
+mypy>=1.0
