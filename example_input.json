@@ -12,6 +12,7 @@
   "machines": [
     {
       "hostname": "TESTPOD1",
+      "serial_number": "CN747515B80171",
       "pxe_mac": "ec:2a:72:11:c4:36",
       "power_type": "ipmi",
       "power_parameters": {
@@ -53,6 +54,7 @@
     },
     {
       "hostname": "WZP293393H8",
+      "serial_number": "WZP293393H8",
       "pxe_mac": "10:57:25:06:EB:5C",
       "power_type": "ipmi",
       "power_parameters": {

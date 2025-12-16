@@ -51,8 +51,8 @@ class MachineManager:
                     return m
         return None
 
-    def find_by_bmc_ip(self, bmc_ip: str) -> Optional[Dict]:
-        """Find machine by BMC/IPMI IP address in power parameters"""
+    def find_by_serial(self, serial: str) -> Optional[Dict]:
+        """Find machine by system serial number"""
         from .utils import retry
         try:
             machines = retry(lambda: self.client.list_machines(), retries=self.max_retries, delay=2.0)
@@ -60,12 +60,21 @@ class MachineManager:
             log.error(f"Failed to list machines after retries: {e}")
             raise
         
+        serial_lower = serial.lower().strip()
         for m in machines:
-            power_params = m.get("power_parameters", {})
-            # Check various power_address fields
-            machine_bmc = power_params.get("power_address", "")
-            if machine_bmc == bmc_ip:
-                return m
+            # Check hardware_info for serial number
+            hw_info = m.get("hardware_info", {})
+            if isinstance(hw_info, dict):
+                system_serial = hw_info.get("system_serial", "").lower().strip()
+                if system_serial and system_serial == serial_lower:
+                    return m
+            
+            # Also check tag_names for serial number tags
+            tag_names = m.get("tag_names", [])
+            for tag in tag_names:
+                if serial_lower in tag.lower():
+                    return m
+        
         return None
 
     def update_hostname(self, system_id: str, new_hostname: str) -> Dict:
@@ -87,14 +96,35 @@ class MachineManager:
         """Create machine or return existing one (including discovered machines)"""
         hostname = cfg.get("hostname")
         pxe_mac = cfg.get("pxe_mac")
+        serial = cfg.get("serial_number")
 
-        if not hostname and not pxe_mac:
-            raise ValueError("Machine config must have either 'hostname' or 'pxe_mac'")
+        if not hostname and not pxe_mac and not serial:
+            raise ValueError("Machine config must have 'hostname', 'pxe_mac', or 'serial_number'")
 
-        # Try to find existing machine (including discovered/new machines)
         machine = None
         
-        # Priority 1: Search by hostname first
+        # Priority 1: Search by serial number (most reliable, doesn't change)
+        if serial:
+            log.info(f"Searching for machine by serial number: {serial}")
+            machine = self.find_by_serial(serial)
+            if machine:
+                current_hostname = machine.get('hostname', 'unknown')
+                system_id = machine['system_id']
+                status = machine.get('status_name', 'unknown')
+                
+                log.info(f"✓ Found machine by serial: {current_hostname} ({system_id}) - Status: {status}")
+                
+                # Update hostname if it doesn't match desired hostname
+                if hostname and current_hostname != hostname:
+                    log.info(f"Updating hostname from '{current_hostname}' to '{hostname}'")
+                    try:
+                        machine = self.update_hostname(system_id, hostname)
+                    except Exception as e:
+                        log.warning(f"Could not update hostname: {e}")
+                
+                return machine
+        
+        # Priority 2: Search by hostname
         if hostname:
             log.info(f"Searching for machine by hostname: {hostname}")
             machine = self.find_by_hostname(hostname)
@@ -102,33 +132,24 @@ class MachineManager:
                 log.info(f"✓ Found machine by hostname: {hostname} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
                 return machine
         
-        # Priority 2: If not found by hostname, search by MAC address
-        # This is crucial for discovered machines that have auto-generated names
-        if not machine and pxe_mac:
-            log.info(f"Hostname not found. Searching for machine by MAC: {pxe_mac}")
+        # Priority 3: Search by MAC address
+        if pxe_mac:
+            log.info(f"Searching for machine by MAC: {pxe_mac}")
             machine = self.find_by_mac(pxe_mac)
             if machine:
                 current_hostname = machine.get('hostname', 'unknown')
                 system_id = machine['system_id']
                 status = machine.get('status_name', 'unknown')
-                status_code = machine.get('status', -1)
                 
                 log.info(f"✓ Found machine by MAC: {current_hostname} ({system_id}) - Status: {status}")
                 
-                # Update hostname if machine is in New state (status code 0) with auto-generated name
-                # Auto-generated names are typically like: ace-swan, brave-owl, etc.
+                # Update hostname if desired and different
                 if hostname and current_hostname != hostname:
-                    # Check if machine is in New state (status 0 or status_name "New")
-                    is_new_state = (status_code == 0 or status.lower() == 'new')
-                    
-                    if is_new_state:
-                        log.info(f"Machine in New state with hostname '{current_hostname}'. Updating to '{hostname}'...")
-                        try:
-                            machine = self.update_hostname(system_id, hostname)
-                        except Exception as e:
-                            log.warning(f"Could not update hostname: {e}. Continuing with current hostname.")
-                    else:
-                        log.info(f"Machine not in New state (status: {status}). Keeping existing hostname '{current_hostname}'")
+                    log.info(f"Updating hostname from '{current_hostname}' to '{hostname}'")
+                    try:
+                        machine = self.update_hostname(system_id, hostname)
+                    except Exception as e:
+                        log.warning(f"Could not update hostname: {e}")
                 
                 return machine
 

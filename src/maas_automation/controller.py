@@ -104,21 +104,28 @@ class Controller:
                 log.error(f"Failed to create/find machine: {e}")
                 return None
         else:
-            # If no create/find action, must have hostname to lookup existing machine
-            hostname = machine_cfg.get('hostname')
-            if not hostname:
-                log.error("No 'create_machine' action specified and no hostname provided")
+            # If no create/find action, look up existing machine
+            # Use create_or_find logic which searches by hostname then MAC
+            log.info("=" * 60)
+            log.info("STEP: Find Existing Machine")
+            log.info("=" * 60)
+            
+            try:
+                machine = self.machine.create_or_find(machine_cfg)
+                
+                if not machine:
+                    log.error("Machine not found by hostname or MAC address")
+                    hostname = machine_cfg.get('hostname', 'unknown')
+                    pxe_mac = machine_cfg.get('pxe_mac', 'unknown')
+                    log.error(f"Searched for: hostname='{hostname}', pxe_mac='{pxe_mac}'")
+                    return None
+                
+                system_id = machine.get('system_id')
+                log.info(f"Found machine system_id: {system_id}\n")
+                
+            except Exception as e:
+                log.error(f"Failed to find machine: {e}")
                 return None
-            
-            log.info(f"Looking up existing machine: {hostname}")
-            machine = self.machine.find_by_hostname(hostname)
-            
-            if not machine:
-                log.error(f"Machine '{hostname}' not found. Add 'create_machine' to actions to create it.")
-                return None
-            
-            system_id = machine.get('system_id')
-            log.info(f"Found machine system_id: {system_id}\n")
 
         if not system_id:
             log.error("No machine system_id available")
@@ -220,14 +227,20 @@ class Controller:
         """List all machines in MAAS"""
         machines = self.client.list_machines()
         
-        print("\n" + "=" * 85)
-        print(f"{'SYSTEM_ID':<15} {'HOSTNAME':<25} {'STATUS':<20} {'MAC ADDRESS':<20}")
-        print("=" * 85)
+        print("\n" + "=" * 105)
+        print(f"{'SYSTEM_ID':<15} {'HOSTNAME':<25} {'STATUS':<15} {'SERIAL':<25} {'MAC ADDRESS':<20}")
+        print("=" * 105)
         
         for m in machines:
             system_id = m['system_id']
             hostname = m.get('hostname', '-')
             status = m.get('status_name', '-')
+            
+            # Get serial number from hardware_info
+            serial = '-'
+            hw_info = m.get('hardware_info', {})
+            if isinstance(hw_info, dict):
+                serial = hw_info.get('system_serial', '-')
             
             # Get first MAC address from interfaces
             mac_addr = '-'
@@ -235,7 +248,7 @@ class Controller:
             if interfaces and len(interfaces) > 0:
                 mac_addr = interfaces[0].get('mac_address', '-')
             
-            print(f"{system_id:<15} {hostname:<25} {status:<20} {mac_addr:<20}")
+            print(f"{system_id:<15} {hostname:<25} {status:<15} {serial:<25} {mac_addr:<20}")
         
-        print("=" * 85)
+        print("=" * 105)
         print(f"Total: {len(machines)} machines\n")
