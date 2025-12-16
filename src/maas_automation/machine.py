@@ -93,65 +93,41 @@ class MachineManager:
             raise
 
     def create_or_find(self, cfg: Dict) -> Dict:
-        """Create machine or return existing one (including discovered machines)"""
+        """Find machine by serial number only and update hostname if needed"""
         hostname = cfg.get("hostname")
-        pxe_mac = cfg.get("pxe_mac")
         serial = cfg.get("serial_number")
 
-        if not hostname and not pxe_mac and not serial:
-            raise ValueError("Machine config must have 'hostname', 'pxe_mac', or 'serial_number'")
+        if not serial:
+            raise ValueError("Machine config must have 'serial_number' to match discovered machines")
 
-        machine = None
+        # Search ONLY by serial number
+        log.info(f"Searching for machine by serial number: {serial}")
+        machine = self.find_by_serial(serial)
         
-        # Priority 1: Search by serial number (most reliable, doesn't change)
-        if serial:
-            log.info(f"Searching for machine by serial number: {serial}")
-            machine = self.find_by_serial(serial)
-            if machine:
-                current_hostname = machine.get('hostname', 'unknown')
-                system_id = machine['system_id']
-                status = machine.get('status_name', 'unknown')
-                
-                log.info(f"✓ Found machine by serial: {current_hostname} ({system_id}) - Status: {status}")
-                
-                # Update hostname if it doesn't match desired hostname
-                if hostname and current_hostname != hostname:
-                    log.info(f"Updating hostname from '{current_hostname}' to '{hostname}'")
-                    try:
-                        machine = self.update_hostname(system_id, hostname)
-                    except Exception as e:
-                        log.warning(f"Could not update hostname: {e}")
-                
-                return machine
+        if not machine:
+            log.error(f"Machine with serial '{serial}' not found in MAAS")
+            log.info("Ensure the machine has PXE booted and been discovered by MAAS")
+            return None
         
-        # Priority 2: Search by hostname
-        if hostname:
-            log.info(f"Searching for machine by hostname: {hostname}")
-            machine = self.find_by_hostname(hostname)
-            if machine:
-                log.info(f"✓ Found machine by hostname: {hostname} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
-                return machine
+        current_hostname = machine.get('hostname', 'unknown')
+        system_id = machine['system_id']
+        status = machine.get('status_name', 'unknown')
         
-        # Priority 3: Search by MAC address
-        if pxe_mac:
-            log.info(f"Searching for machine by MAC: {pxe_mac}")
-            machine = self.find_by_mac(pxe_mac)
-            if machine:
-                current_hostname = machine.get('hostname', 'unknown')
-                system_id = machine['system_id']
-                status = machine.get('status_name', 'unknown')
-                
-                log.info(f"✓ Found machine by MAC: {current_hostname} ({system_id}) - Status: {status}")
-                
-                # Update hostname if desired and different
-                if hostname and current_hostname != hostname:
-                    log.info(f"Updating hostname from '{current_hostname}' to '{hostname}'")
-                    try:
-                        machine = self.update_hostname(system_id, hostname)
-                    except Exception as e:
-                        log.warning(f"Could not update hostname: {e}")
-                
-                return machine
+        log.info(f"✓ Found machine by serial: {current_hostname} ({system_id}) - Status: {status}")
+        
+        # Always update hostname to match what's in the JSON config
+        if hostname and current_hostname != hostname:
+            log.info(f"Updating hostname from '{current_hostname}' to '{hostname}'")
+            try:
+                machine = self.update_hostname(system_id, hostname)
+                log.info(f"✓ Hostname updated successfully")
+            except Exception as e:
+                log.error(f"Failed to update hostname: {e}")
+                raise
+        elif hostname:
+            log.info(f"Hostname already matches: {hostname}")
+        
+        return machine
 
         # Machine not found - create new one
         # Note: In MAAS, machines that PXE boot are auto-discovered. 
