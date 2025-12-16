@@ -236,10 +236,24 @@ class Controller:
                 mac_addr = interfaces[0].get('mac_address', '-')
             
             # Get BMC IP from power parameters
+            # Need to fetch full machine details as list doesn't include power_parameters
             bmc_ip = '-'
-            power_params = m.get('power_parameters', {})
-            if isinstance(power_params, dict):
-                bmc_ip = power_params.get('power_address', '-')
+            try:
+                machine_detail = self.client.get_machine(system_id)
+                power_params = machine_detail.get('power_parameters', {})
+                
+                # Power parameters might be a JSON string or dict
+                if isinstance(power_params, str):
+                    import json
+                    try:
+                        power_params = json.loads(power_params)
+                    except:
+                        power_params = {}
+                
+                if isinstance(power_params, dict):
+                    bmc_ip = power_params.get('power_address', '-')
+            except Exception as e:
+                log.debug(f"Could not fetch power parameters for {system_id}: {e}")
             
             print(f"{system_id:<15} {hostname:<20} {status:<15} {mac_addr:<20} {bmc_ip:<20}")
         
