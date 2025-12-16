@@ -37,32 +37,37 @@ class MachineManager:
         return None
 
     def create_or_find(self, cfg: Dict) -> Dict:
-        """Create machine or return existing one"""
+        """Create machine or return existing one (including discovered machines)"""
         hostname = cfg.get("hostname")
         pxe_mac = cfg.get("pxe_mac")
 
         if not hostname and not pxe_mac:
             raise ValueError("Machine config must have either 'hostname' or 'pxe_mac'")
 
-        # Try to find existing machine
-        if hostname:
-            log.debug(f"Searching for existing machine: {hostname}")
-            machine = self.find_by_hostname(hostname)
-            if machine:
-                log.info(f"Found existing machine: {hostname} ({machine['system_id']})")
-                return machine
-
+        # Try to find existing machine (including discovered/new machines)
+        # Search by MAC first as it's more reliable for discovered machines
         if pxe_mac:
-            log.debug(f"Searching for existing machine by MAC: {pxe_mac}")
+            log.info(f"Searching for machine by MAC: {pxe_mac}")
             machine = self.find_by_mac(pxe_mac)
             if machine:
-                log.info(f"Found existing machine by MAC: {pxe_mac} ({machine['system_id']})")
+                log.info(f"✓ Found existing machine by MAC: {machine.get('hostname', 'unknown')} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
                 return machine
 
-        # Create new machine
-        log.info(f"Machine not found. Creating new machine: {hostname or pxe_mac}")
+        if hostname:
+            log.info(f"Searching for machine by hostname: {hostname}")
+            machine = self.find_by_hostname(hostname)
+            if machine:
+                log.info(f"✓ Found existing machine: {hostname} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
+                return machine
+
+        # Machine not found - create new one
+        # Note: In MAAS, machines that PXE boot are auto-discovered. 
+        # Manual creation is only needed for machines that haven't PXE booted yet.
+        log.info(f"Machine not found in MAAS. Creating new machine entry...")
+        
         payload = {
             "hostname": hostname or f"node-{pxe_mac.replace(':', '')}",
+            "architecture": cfg.get("architecture", "amd64/generic"),  # Required field
         }
         
         if pxe_mac:
@@ -88,6 +93,7 @@ class MachineManager:
             return machine
         except Exception as e:
             log.error(f"Failed to create machine: {e}")
+            log.error(f"Tip: If machine already PXE booted, it may be auto-discovered. Check MAAS UI for 'New' machines.")
             raise
 
     def update_power(self, system_id: str, cfg: Dict):
