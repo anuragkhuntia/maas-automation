@@ -1,6 +1,6 @@
 {
-  "maas_api_url": "http://10.81.31.31:5240/MAAS",
-  "maas_api_key": "JaFJxg6ZDINfMPach:vPHBoTEpxZL5jpvk2:ydSt8mmwH5IEj0wRL4c5vBa8CLDOYupp",
+  "maas_api_url": "http://<MAAS-IP>:5240/MAAS",
+  "maas_api_key": "<MAAS-API-KEY>",
   "actions": [
     "create_machine",
     "set_power",
