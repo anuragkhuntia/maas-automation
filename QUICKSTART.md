@@ -114,6 +114,30 @@ python3 maas_automation.py -i config.json -a commission
 }
 ```
 
+### Full workflow with network bonding
+```json
+{
+  "actions": ["create_machine", "set_power", "configure_storage", "commission", "configure_network", "deploy"],
+  "machines": [{
+    "hostname": "node01",
+    "network": {
+      "bonds": [{
+        "name": "bond0",
+        "interfaces": ["eth0", "eth1"],
+        "mode": "802.3ad",
+        "mtu": 9000
+      }],
+      "interfaces": [{
+        "name": "bond0",
+        "subnet": "10.0.0.0/24",
+        "ip_mode": "static",
+        "ip_address": "10.0.0.10"
+      }]
+    }
+  }]
+}
+```
+
 ### Full workflow (create → commission → deploy)
 ```json
 {

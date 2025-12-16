@@ -49,6 +49,12 @@ def main():
         action='store_true',
         help='Print configuration without executing (not yet implemented)'
     )
+    parser.add_argument(
+        '--max-retries',
+        type=int,
+        default=5,
+        help='Maximum retries for failed operations (0 = infinite, default: 5)'
+    )
     
     args = parser.parse_args()
 
@@ -112,7 +118,7 @@ def main():
     log.info("")
 
     try:
-        controller = Controller(api_url, api_key)
+        controller = Controller(api_url, api_key, max_retries=args.max_retries)
         
         # Special action: list machines
         if 'list' in cfg.get('actions', []):

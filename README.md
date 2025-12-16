@@ -51,6 +51,15 @@ python3 -m maas_automation.cli -i example_input.json
 
 # Using standalone script
 python3 maas_automation.py -i example_input.json
+
+# With infinite retries (never give up on failures)
+maas-automation -i example_input.json --max-retries 0
+
+# Target specific machines
+maas-automation -i example_input.json --hosts node01,node02
+
+# Override action from CLI
+maas-automation -i example_input.json -a commission --hosts node01
 ```
 
 ## Use Cases
@@ -115,12 +124,13 @@ python3 maas_automation.py -i example_input.json
 Actions run in the order specified:
 
 - `list`: List all machines in MAAS (ignores machines array)
-- `create_machine` / `find_machine`: Find by hostname/MAC or create new
+- `create_machine` / `find_machine`: Find by hostname/MAC/BMC-IP or create new
 - `set_power`: Configure IPMI/power parameters
 - `set_bios`: Store BIOS settings (metadata only)
 - `set_boot_order`: Configure boot device order
 - `configure_storage`: Apply Curtin storage layout (before commissioning)
 - `commission`: Commission machine with optional scripts
+- `configure_network`: Create bonds and configure interfaces (after commission, before deploy)
 - `deploy`: Deploy operating system
 - `release`: Release machine and wipe disks
 - `delete`: Remove machine from MAAS
@@ -148,7 +158,122 @@ The SDK automatically waits for long-running operations:
 - **Deploy**: Waits up to 30 minutes (configurable)
 - **Release**: Waits up to 30 minutes (configurable)
 
+## Retry Logic
+
+The SDK includes robust retry logic for transient failures:
+
+- **Default**: 5 retries with exponential backoff (1s, 2s, 4s, 8s, 16s...)
+- **Infinite mode**: `--max-retries 0` retries forever until success
+- **Max delay**: Caps at 60 seconds between retries
+- **Timeout**: HTTP requests timeout after 120 seconds
+
+Example with infinite retries (recommended for unreliable networks):
+```bash
+maas-automation -i config.json --max-retries 0
+```
+
+This ensures the workflow never breaks on transient API timeouts or network issues.
+
 Progress is logged in real-time. Operations fail fast on error states.
+
+## Network Configuration
+
+The SDK can configure network bonds and interfaces after commissioning (when machine is in READY state):
+
+### Bond Configuration
+
+Create network bonds from multiple interfaces:
+
+```json
+{
+  "network": {
+    "bonds": [
+      {
+        "name": "bond0",
+        "interfaces": ["eth0", "eth1"],
+        "mode": "802.3ad",
+        "mtu": 9000,
+        "lacp_rate": "fast",
+        "xmit_hash_policy": "layer3+4"
+      }
+    ]
+  }
+}
+```
+
+**Supported bond modes:**
+- `802.3ad` - LACP (IEEE 802.3ad) - requires switch support
+- `active-backup` - Active-backup policy (fault tolerance)
+- `balance-rr` - Round-robin policy (load balancing)
+- `balance-xor` - XOR policy
+- `broadcast` - Broadcast policy
+- `balance-tlb` - Adaptive transmit load balancing
+- `balance-alb` - Adaptive load balancing
+
+### Interface Configuration
+
+Configure IP addresses, VLANs, and MTU:
+
+```json
+{
+  "network": {
+    "interfaces": [
+      {
+        "name": "bond0",
+        "subnet": "10.0.0.0/24",
+        "ip_mode": "static",
+        "ip_address": "10.0.0.10",
+        "mtu": 9000
+      },
+      {
+        "name": "eth2",
+        "subnet": "192.168.1.0/24",
+        "ip_mode": "dhcp"
+      }
+    ]
+  }
+}
+```
+
+**IP modes:**
+- `static` - Static IP (requires `ip_address`)
+- `dhcp` - DHCP assignment
+- `auto` - MAAS auto-assignment from subnet
+
+### Complete Workflow Example
+
+```json
+{
+  "actions": ["create_machine", "commission", "configure_network", "deploy"],
+  "machines": [
+    {
+      "hostname": "node01",
+      "network": {
+        "bonds": [
+          {
+            "name": "bond0",
+            "interfaces": ["eth0", "eth1"],
+            "mode": "802.3ad",
+            "mtu": 9000
+          }
+        ],
+        "interfaces": [
+          {
+            "name": "bond0",
+            "subnet": "10.0.0.0/24",
+            "ip_mode": "static",
+            "ip_address": "10.0.0.10"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+**Network configuration must run:**
+- ✓ After `commission` (when machine is READY)
+- ✓ Before `deploy`
 
 ## Configuration Reference
 

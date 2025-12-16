@@ -43,6 +43,20 @@ class MaasClient:
         self.api_key = api_key
         self.session = requests.Session()
         self.session.verify = True  # Set to False for self-signed certs
+        
+        # Configure retries for connection issues
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        
+        retry_strategy = Retry(
+            total=5,
+            backoff_factor=2,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -61,14 +75,17 @@ class MaasClient:
         log.debug(f"{method} {url}")
         
         try:
+            # Increase timeout for slow MAAS operations
+            timeout = 120
+            
             if method == "GET":
-                resp = self.session.get(url, headers=headers, timeout=30)
+                resp = self.session.get(url, headers=headers, timeout=timeout)
             elif method == "POST":
-                resp = self.session.post(url, headers=headers, data=data, json=json_data, timeout=30)
+                resp = self.session.post(url, headers=headers, data=data, json=json_data, timeout=timeout)
             elif method == "PUT":
-                resp = self.session.put(url, headers=headers, data=data, json=json_data, timeout=30)
+                resp = self.session.put(url, headers=headers, data=data, json=json_data, timeout=timeout)
             elif method == "DELETE":
-                resp = self.session.delete(url, headers=headers, timeout=30)
+                resp = self.session.delete(url, headers=headers, timeout=timeout)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 

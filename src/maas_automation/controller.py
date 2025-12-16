@@ -6,6 +6,7 @@ from .machine import MachineManager
 from .storage import StorageManager
 from .bios import BIOSManager
 from .boot import BootManager
+from .network import NetworkManager
 
 log = logging.getLogger("maas_automation.controller")
 
@@ -13,12 +14,17 @@ log = logging.getLogger("maas_automation.controller")
 class Controller:
     """Orchestrates MAAS automation workflows"""
 
-    def __init__(self, api_url: str, api_key: str):
+    def __init__(self, api_url: str, api_key: str, max_retries: int = 5):
         self.client = MaasClient(api_url, api_key)
-        self.machine = MachineManager(self.client)
+        self.machine = MachineManager(self.client, max_retries=max_retries)
         self.storage = StorageManager(self.client)
         self.bios = BIOSManager(self.client)
         self.boot = BootManager(self.client)
+        self.network = NetworkManager(self.client, max_retries=max_retries)
+        self.max_retries = max_retries
+        
+        if max_retries == 0:
+            log.info("⚠️  Infinite retry mode enabled - operations will retry forever on failure")
 
     def execute_workflow(self, cfg: Dict) -> list:
         """
@@ -50,10 +56,18 @@ class Controller:
             log.info(f"PROCESSING MACHINE {idx}/{len(machines_cfg)}: {machine_cfg.get('hostname', 'unknown')}")
             log.info("=" * 60)
             
-            system_id = self._execute_single_machine(machine_cfg, actions, storage_cfg, 
-                                                      bios_cfg, boot_order, release_cfg)
-            if system_id:
-                system_ids.append(system_id)
+            try:
+                system_id = self._execute_single_machine(machine_cfg, actions, storage_cfg, 
+                                                          bios_cfg, boot_order, release_cfg)
+                if system_id:
+                    system_ids.append(system_id)
+                    log.info(f"✓ Successfully processed machine: {system_id}")
+                else:
+                    log.warning(f"Machine {machine_cfg.get('hostname')} was not processed (no system_id)")
+            except Exception as e:
+                log.error(f"Failed to process machine {machine_cfg.get('hostname')}: {e}")
+                log.info("Continuing with next machine...")
+                continue
         
         return system_ids
 
@@ -155,7 +169,19 @@ class Controller:
             self.machine.commission(system_id, scripts=scripts, wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 7: Deploy machine
+        # Step 7: Configure network (bonds/interfaces) - after commission, before deploy
+        if 'configure_network' in actions:
+            log.info("=" * 60)
+            log.info("STEP: Configure Network")
+            log.info("=" * 60)
+            network_cfg = machine_cfg.get('network', {})
+            if not network_cfg:
+                log.warning("No network configuration provided in machine config")
+            else:
+                self.network.apply_network_config(system_id, network_cfg)
+            log.info("")
+
+        # Step 8: Deploy machine
         if 'deploy' in actions:
             log.info("=" * 60)
             log.info("STEP: Deploy Machine")
@@ -168,7 +194,7 @@ class Controller:
                               wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 8: Release machine
+        # Step 9: Release machine
         if 'release' in actions:
             log.info("=" * 60)
             log.info("STEP: Release Machine")
@@ -179,7 +205,7 @@ class Controller:
             self.machine.release(system_id, erase=erase, wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 9: Delete machine
+        # Step 10: Delete machine
         if 'delete' in actions:
             log.info("=" * 60)
             log.info("STEP: Delete Machine")

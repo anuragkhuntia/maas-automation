@@ -11,13 +11,21 @@ log = logging.getLogger("maas_automation.machine")
 class MachineManager:
     """Manages machine lifecycle operations"""
 
-    def __init__(self, client: MaasClient):
+    def __init__(self, client: MaasClient, max_retries: int = 5):
         self.client = client
+        self.max_retries = max_retries
 
     def find_by_hostname(self, hostname: str) -> Optional[Dict]:
         """Find machine by hostname (case-insensitive)"""
         hostname = hostname.lower()
-        machines = self.client.list_machines()
+        
+        # Retry list_machines on timeout
+        from .utils import retry
+        try:
+            machines = retry(lambda: self.client.list_machines(), retries=self.max_retries, delay=2.0)
+        except Exception as e:
+            log.error(f"Failed to list machines after retries: {e}")
+            raise
         
         for m in machines:
             if m.get("hostname", "").lower() == hostname:
@@ -27,7 +35,14 @@ class MachineManager:
     def find_by_mac(self, mac: str) -> Optional[Dict]:
         """Find machine by MAC address"""
         mac = mac.lower().replace(":", "").replace("-", "")
-        machines = self.client.list_machines()
+        
+        # Retry list_machines on timeout
+        from .utils import retry
+        try:
+            machines = retry(lambda: self.client.list_machines(), retries=self.max_retries, delay=2.0)
+        except Exception as e:
+            log.error(f"Failed to list machines after retries: {e}")
+            raise
         
         for m in machines:
             for iface in m.get("interfaces", []):
@@ -36,16 +51,38 @@ class MachineManager:
                     return m
         return None
 
+    def find_by_bmc_ip(self, bmc_ip: str) -> Optional[Dict]:
+        """Find machine by BMC/IPMI IP address in power parameters"""
+        from .utils import retry
+        try:
+            machines = retry(lambda: self.client.list_machines(), retries=self.max_retries, delay=2.0)
+        except Exception as e:
+            log.error(f"Failed to list machines after retries: {e}")
+            raise
+        
+        for m in machines:
+            power_params = m.get("power_parameters", {})
+            # Check various power_address fields
+            machine_bmc = power_params.get("power_address", "")
+            if machine_bmc == bmc_ip:
+                return m
+        return None
+
     def create_or_find(self, cfg: Dict) -> Dict:
         """Create machine or return existing one (including discovered machines)"""
         hostname = cfg.get("hostname")
         pxe_mac = cfg.get("pxe_mac")
+        bmc_ip = None
+        
+        # Extract BMC IP from power_parameters if present
+        if cfg.get("power_parameters"):
+            bmc_ip = cfg["power_parameters"].get("power_address")
 
-        if not hostname and not pxe_mac:
-            raise ValueError("Machine config must have either 'hostname' or 'pxe_mac'")
+        if not hostname and not pxe_mac and not bmc_ip:
+            raise ValueError("Machine config must have either 'hostname', 'pxe_mac', or 'power_address' (BMC IP)")
 
         # Try to find existing machine (including discovered/new machines)
-        # Search by MAC first as it's more reliable for discovered machines
+        # Search by MAC first as it's most reliable for discovered machines
         if pxe_mac:
             log.info(f"Searching for machine by MAC: {pxe_mac}")
             machine = self.find_by_mac(pxe_mac)
@@ -53,11 +90,19 @@ class MachineManager:
                 log.info(f"✓ Found existing machine by MAC: {machine.get('hostname', 'unknown')} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
                 return machine
 
+        # Search by BMC IP (useful when MAC might change but BMC IP is static)
+        if bmc_ip:
+            log.info(f"Searching for machine by BMC IP: {bmc_ip}")
+            machine = self.find_by_bmc_ip(bmc_ip)
+            if machine:
+                log.info(f"✓ Found existing machine by BMC IP: {machine.get('hostname', 'unknown')} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
+                return machine
+
         if hostname:
             log.info(f"Searching for machine by hostname: {hostname}")
             machine = self.find_by_hostname(hostname)
             if machine:
-                log.info(f"✓ Found existing machine: {hostname} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
+                log.info(f"✓ Found existing machine by hostname: {hostname} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
                 return machine
 
         # Machine not found - create new one
@@ -82,17 +127,26 @@ class MachineManager:
                 payload[f"power_parameters_{k}"] = str(v)
 
         log.debug(f"Create machine payload: {payload}")
+        log.info("Creating machine in MAAS (this adds it without commissioning)...")
         
+        from .utils import retry
         try:
-            machine = self.client.create_machine(payload)
+            # Retry machine creation on timeout
+            machine = retry(
+                lambda: self.client.create_machine(payload),
+                retries=self.max_retries,
+                delay=3.0,
+                backoff=2.0
+            )
             
             if not machine or not machine.get('system_id'):
                 raise ValueError(f"Machine creation returned invalid response: {machine}")
             
-            log.info(f"✓ Created machine: {machine['system_id']}")
+            log.info(f"✓ Machine added to MAAS: {machine['system_id']} (Status: {machine.get('status_name', 'New')})")
+            log.info(f"Note: Machine is added but NOT commissioned. Use 'commission' action to commission it.")
             return machine
         except Exception as e:
-            log.error(f"Failed to create machine: {e}")
+            log.error(f"Failed to create machine after retries: {e}")
             log.error(f"Tip: If machine already PXE booted, it may be auto-discovered. Check MAAS UI for 'New' machines.")
             raise
 

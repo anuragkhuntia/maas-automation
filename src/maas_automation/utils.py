@@ -6,19 +6,42 @@ from typing import Callable, Optional, List
 log = logging.getLogger("maas_automation.utils")
 
 
-def retry(fn: Callable, retries: int = 5, delay: float = 1.0, backoff: float = 2.0):
-    """Retry a function with exponential backoff"""
+def retry(fn: Callable, retries: int = 5, delay: float = 1.0, backoff: float = 2.0, max_delay: float = 60.0):
+    """
+    Retry a function with exponential backoff.
+    
+    Args:
+        fn: Function to retry
+        retries: Number of retries (0 = infinite)
+        delay: Initial delay in seconds
+        backoff: Backoff multiplier
+        max_delay: Maximum delay between retries
+        
+    Returns:
+        Result of fn()
+        
+    Raises:
+        Last exception if all retries exhausted
+    """
     last = None
-    for i in range(retries):
+    attempt = 0
+    
+    while True:
         try:
             return fn()
         except Exception as e:
             last = e
-            log.debug(f"Retry {i+1}/{retries} failed: {e}")
-            if i < retries - 1:
-                sleep_time = delay * (backoff ** i)
-                time.sleep(sleep_time)
-    raise last
+            attempt += 1
+            
+            # If retries is 0, retry forever
+            if retries > 0 and attempt >= retries:
+                log.error(f"All {retries} retries exhausted")
+                raise last
+            
+            sleep_time = min(delay * (backoff ** (attempt - 1)), max_delay)
+            retry_msg = f"infinite retries" if retries == 0 else f"{attempt}/{retries}"
+            log.warning(f"Retry {retry_msg} failed: {e}. Waiting {sleep_time:.1f}s before retry...")
+            time.sleep(sleep_time)
 
 
 def wait_for_state(check_fn: Callable[[], str], 
