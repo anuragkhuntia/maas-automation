@@ -72,9 +72,39 @@ class Controller:
             log.info("=" * 60)
             log.info("STEP: Create/Find Machine")
             log.info("=" * 60)
-            machine = self.machine.create_or_find(machine_cfg)
+            try:
+                machine = self.machine.create_or_find(machine_cfg)
+                
+                if not machine:
+                    log.error("create_or_find returned None")
+                    return None
+                    
+                system_id = machine.get('system_id')
+                
+                if not system_id:
+                    log.error(f"Machine object has no system_id. Machine data: {machine}")
+                    return None
+                    
+                log.info(f"Machine system_id: {system_id}\n")
+            except Exception as e:
+                log.error(f"Failed to create/find machine: {e}")
+                return None
+        else:
+            # If no create/find action, must have hostname to lookup existing machine
+            hostname = machine_cfg.get('hostname')
+            if not hostname:
+                log.error("No 'create_machine' action specified and no hostname provided")
+                return None
+            
+            log.info(f"Looking up existing machine: {hostname}")
+            machine = self.machine.find_by_hostname(hostname)
+            
+            if not machine:
+                log.error(f"Machine '{hostname}' not found. Add 'create_machine' to actions to create it.")
+                return None
+            
             system_id = machine.get('system_id')
-            log.info(f"Machine system_id: {system_id}\n")
+            log.info(f"Found machine system_id: {system_id}\n")
 
         if not system_id:
             log.error("No machine system_id available")
