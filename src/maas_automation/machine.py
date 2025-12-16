@@ -68,6 +68,21 @@ class MachineManager:
                 return m
         return None
 
+    def update_hostname(self, system_id: str, new_hostname: str) -> Dict:
+        """Update machine hostname"""
+        log.info(f"Updating hostname to: {new_hostname}")
+        try:
+            machine = self.client.request(
+                "PUT",
+                f"machines/{system_id}/",
+                data={"hostname": new_hostname}
+            )
+            log.info(f"✓ Hostname updated to: {new_hostname}")
+            return machine
+        except Exception as e:
+            log.error(f"Failed to update hostname: {e}")
+            raise
+
     def create_or_find(self, cfg: Dict) -> Dict:
         """Create machine or return existing one (including discovered machines)"""
         hostname = cfg.get("hostname")
@@ -82,27 +97,58 @@ class MachineManager:
             raise ValueError("Machine config must have either 'hostname', 'pxe_mac', or 'power_address' (BMC IP)")
 
         # Try to find existing machine (including discovered/new machines)
-        # Search by MAC first as it's most reliable for discovered machines
-        if pxe_mac:
-            log.info(f"Searching for machine by MAC: {pxe_mac}")
-            machine = self.find_by_mac(pxe_mac)
-            if machine:
-                log.info(f"✓ Found existing machine by MAC: {machine.get('hostname', 'unknown')} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
-                return machine
-
-        # Search by BMC IP (useful when MAC might change but BMC IP is static)
+        # For discovered machines, prioritize BMC IP as it's most reliable
+        # (discovered machines may have auto-generated hostnames like "ace-swan")
+        machine = None
+        
+        # Priority 1: Search by BMC IP (best for discovered machines)
         if bmc_ip:
             log.info(f"Searching for machine by BMC IP: {bmc_ip}")
             machine = self.find_by_bmc_ip(bmc_ip)
             if machine:
-                log.info(f"✓ Found existing machine by BMC IP: {machine.get('hostname', 'unknown')} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
+                current_hostname = machine.get('hostname', 'unknown')
+                system_id = machine['system_id']
+                status = machine.get('status_name', 'unknown')
+                
+                log.info(f"✓ Found machine by BMC IP: {current_hostname} ({system_id}) - Status: {status}")
+                
+                # Update hostname if it doesn't match desired hostname
+                if hostname and current_hostname != hostname:
+                    log.info(f"Hostname mismatch: current='{current_hostname}', desired='{hostname}'")
+                    try:
+                        machine = self.update_hostname(system_id, hostname)
+                    except Exception as e:
+                        log.warning(f"Could not update hostname: {e}. Continuing with current hostname.")
+                
                 return machine
-
-        if hostname:
+        
+        # Priority 2: Search by MAC address
+        if not machine and pxe_mac:
+            log.info(f"Searching for machine by MAC: {pxe_mac}")
+            machine = self.find_by_mac(pxe_mac)
+            if machine:
+                current_hostname = machine.get('hostname', 'unknown')
+                system_id = machine['system_id']
+                status = machine.get('status_name', 'unknown')
+                
+                log.info(f"✓ Found machine by MAC: {current_hostname} ({system_id}) - Status: {status}")
+                
+                # Update hostname if it doesn't match
+                if hostname and current_hostname != hostname:
+                    log.info(f"Hostname mismatch: current='{current_hostname}', desired='{hostname}'")
+                    try:
+                        machine = self.update_hostname(system_id, hostname)
+                    except Exception as e:
+                        log.warning(f"Could not update hostname: {e}. Continuing with current hostname.")
+                
+                return machine
+        
+        # Priority 3: Search by hostname (least reliable for discovered machines)
+        if not machine and hostname:
             log.info(f"Searching for machine by hostname: {hostname}")
             machine = self.find_by_hostname(hostname)
             if machine:
-                log.info(f"✓ Found existing machine by hostname: {hostname} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
+                log.info(f"✓ Found machine by hostname: {hostname} ({machine['system_id']}) - Status: {machine.get('status_name', 'unknown')}")
                 return machine
 
         # Machine not found - create new one

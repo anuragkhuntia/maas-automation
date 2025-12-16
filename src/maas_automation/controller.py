@@ -220,12 +220,28 @@ class Controller:
         """List all machines in MAAS"""
         machines = self.client.list_machines()
         
-        print("\n" + "=" * 70)
-        print(f"{'SYSTEM_ID':<15} {'HOSTNAME':<20} {'STATUS':<20}")
-        print("=" * 70)
+        print("\n" + "=" * 120)
+        print(f"{'SYSTEM_ID':<15} {'HOSTNAME':<20} {'STATUS':<15} {'MAC ADDRESS':<20} {'BMC IP':<20}")
+        print("=" * 120)
         
         for m in machines:
-            print(f"{m['system_id']:<15} {m.get('hostname', '-'):<20} {m.get('status_name', '-'):<20}")
+            system_id = m['system_id']
+            hostname = m.get('hostname', '-')
+            status = m.get('status_name', '-')
+            
+            # Get first MAC address from interfaces
+            mac_addr = '-'
+            interfaces = m.get('interface_set', m.get('interfaces', []))
+            if interfaces and len(interfaces) > 0:
+                mac_addr = interfaces[0].get('mac_address', '-')
+            
+            # Get BMC IP from power parameters
+            bmc_ip = '-'
+            power_params = m.get('power_parameters', {})
+            if isinstance(power_params, dict):
+                bmc_ip = power_params.get('power_address', '-')
+            
+            print(f"{system_id:<15} {hostname:<20} {status:<15} {mac_addr:<20} {bmc_ip:<20}")
         
-        print("=" * 70)
+        print("=" * 120)
         print(f"Total: {len(machines)} machines\n")
