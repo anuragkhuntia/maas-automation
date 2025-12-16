@@ -41,23 +41,28 @@ class MachineManager:
         hostname = cfg.get("hostname")
         pxe_mac = cfg.get("pxe_mac")
 
+        if not hostname and not pxe_mac:
+            raise ValueError("Machine config must have either 'hostname' or 'pxe_mac'")
+
         # Try to find existing machine
         if hostname:
+            log.debug(f"Searching for existing machine: {hostname}")
             machine = self.find_by_hostname(hostname)
             if machine:
                 log.info(f"Found existing machine: {hostname} ({machine['system_id']})")
                 return machine
 
         if pxe_mac:
+            log.debug(f"Searching for existing machine by MAC: {pxe_mac}")
             machine = self.find_by_mac(pxe_mac)
             if machine:
                 log.info(f"Found existing machine by MAC: {pxe_mac} ({machine['system_id']})")
                 return machine
 
         # Create new machine
-        log.info(f"Creating new machine: {hostname}")
+        log.info(f"Machine not found. Creating new machine: {hostname or pxe_mac}")
         payload = {
-            "hostname": hostname,
+            "hostname": hostname or f"node-{pxe_mac.replace(':', '')}",
         }
         
         if pxe_mac:
@@ -71,9 +76,19 @@ class MachineManager:
             for k, v in cfg["power_parameters"].items():
                 payload[f"power_parameters_{k}"] = str(v)
 
-        machine = self.client.create_machine(payload)
-        log.info(f"✓ Created machine: {machine['system_id']}")
-        return machine
+        log.debug(f"Create machine payload: {payload}")
+        
+        try:
+            machine = self.client.create_machine(payload)
+            
+            if not machine or not machine.get('system_id'):
+                raise ValueError(f"Machine creation returned invalid response: {machine}")
+            
+            log.info(f"✓ Created machine: {machine['system_id']}")
+            return machine
+        except Exception as e:
+            log.error(f"Failed to create machine: {e}")
+            raise
 
     def update_power(self, system_id: str, cfg: Dict):
         """Update power configuration"""
