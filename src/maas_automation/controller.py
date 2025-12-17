@@ -1,6 +1,7 @@
 """Main orchestration controller"""
 import logging
 from typing import Dict, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .client import MaasClient
 from .machine import MachineManager
 from .storage import StorageManager
@@ -47,33 +48,82 @@ class Controller:
         bios_cfg = cfg.get('bios', {})
         boot_order = cfg.get('boot_order', [])
         release_cfg = cfg.get('release', {})
+        parallel = cfg.get('parallel', True)  # Enable parallel processing by default
         
         system_ids = []
         
-        # Process each machine
-        for idx, machine_cfg in enumerate(machines_cfg, 1):
-            log.info("\n" + "=" * 60)
-            log.info(f"PROCESSING MACHINE {idx}/{len(machines_cfg)}: {machine_cfg.get('hostname', 'unknown')}")
+        if parallel and len(machines_cfg) > 1:
+            log.info(f"\n⚡ Processing {len(machines_cfg)} machines in PARALLEL")
             log.info("=" * 60)
             
-            try:
-                system_id = self._execute_single_machine(machine_cfg, actions, storage_cfg, 
-                                                          bios_cfg, boot_order, release_cfg)
-                if system_id:
-                    system_ids.append(system_id)
-                    log.info(f"✓ Successfully processed machine: {system_id}")
-                else:
-                    log.warning(f"Machine {machine_cfg.get('hostname')} was not processed (no system_id)")
-            except KeyboardInterrupt:
-                log.warning("Interrupted by user")
-                raise
-            except Exception as e:
-                log.error(f"Failed to process machine {machine_cfg.get('hostname')}: {e}", exc_info=True)
-                log.info("Continuing with next machine...")
-                continue
+            # Process machines in parallel using ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=len(machines_cfg)) as executor:
+                # Submit all machines for processing
+                future_to_machine = {
+                    executor.submit(
+                        self._execute_single_machine_safe,
+                        machine_cfg, actions, storage_cfg, bios_cfg, boot_order, release_cfg
+                    ): machine_cfg
+                    for machine_cfg in machines_cfg
+                }
+                
+                # Collect results as they complete
+                for future in as_completed(future_to_machine):
+                    machine_cfg = future_to_machine[future]
+                    hostname = machine_cfg.get('hostname', 'unknown')
+                    try:
+                        system_id = future.result()
+                        if system_id:
+                            system_ids.append(system_id)
+                            log.info(f"✓ Completed: {hostname} ({system_id})")
+                        else:
+                            log.warning(f"✗ Failed: {hostname} (no system_id)")
+                    except Exception as e:
+                        log.error(f"✗ Failed: {hostname} - {e}")
+        else:
+            # Sequential processing (original behavior)
+            if not parallel:
+                log.info(f"\n📋 Processing {len(machines_cfg)} machines SEQUENTIALLY")
+            
+            for idx, machine_cfg in enumerate(machines_cfg, 1):
+                log.info("\n" + "=" * 60)
+                log.info(f"PROCESSING MACHINE {idx}/{len(machines_cfg)}: {machine_cfg.get('hostname', 'unknown')}")
+                log.info("=" * 60)
+                
+                try:
+                    system_id = self._execute_single_machine(machine_cfg, actions, storage_cfg, 
+                                                              bios_cfg, boot_order, release_cfg)
+                    if system_id:
+                        system_ids.append(system_id)
+                        log.info(f"✓ Successfully processed machine: {system_id}")
+                    else:
+                        log.warning(f"Machine {machine_cfg.get('hostname')} was not processed (no system_id)")
+                except KeyboardInterrupt:
+                    log.warning("Interrupted by user")
+                    raise
+                except Exception as e:
+                    log.error(f"Failed to process machine {machine_cfg.get('hostname')}: {e}", exc_info=True)
+                    log.info("Continuing with next machine...")
+                    continue
         
-        log.info(f"\n✓ Completed processing {len(system_ids)} machine(s)")
+        log.info(f"\n✓ Completed processing {len(system_ids)}/{len(machines_cfg)} machine(s)")
         return system_ids
+    
+    def _execute_single_machine_safe(self, machine_cfg: Dict, actions: list, storage_cfg: Dict,
+                                      bios_cfg: Dict, boot_order: list, release_cfg: Dict) -> Optional[str]:
+        """
+        Wrapper for _execute_single_machine that catches exceptions for parallel execution.
+        """
+        hostname = machine_cfg.get('hostname', 'unknown')
+        log.info(f"\n🔄 Starting: {hostname}")
+        
+        try:
+            system_id = self._execute_single_machine(machine_cfg, actions, storage_cfg, 
+                                                      bios_cfg, boot_order, release_cfg)
+            return system_id
+        except Exception as e:
+            log.error(f"Failed to process {hostname}: {e}")
+            return None
 
     def _execute_single_machine(self, machine_cfg: Dict, actions: list, storage_cfg: Dict,
                                 bios_cfg: Dict, boot_order: list, release_cfg: Dict) -> Optional[str]:

@@ -73,15 +73,19 @@ def wait_for_state(check_fn: Callable[[], str],
     last_state = None
     consecutive_errors = 0
     max_consecutive_errors = 5
-    elapsed = 0
     
-    while elapsed < timeout:
+    while True:
+        elapsed = time.time() - start
+        
+        # Check timeout
+        if elapsed >= timeout:
+            raise TimeoutError(f"Timeout waiting for states {target_states}. Last state: {last_state}")
+        
         try:
             current_state = check_fn()
             consecutive_errors = 0  # Reset error count on success
             
             if current_state != last_state:
-                elapsed = time.time() - start
                 log.info(f"State: {current_state} (elapsed: {int(elapsed)}s / {timeout}s)")
                 last_state = current_state
             
@@ -93,7 +97,6 @@ def wait_for_state(check_fn: Callable[[], str],
                 raise RuntimeError(f"Machine entered error state: {current_state}")
             
             time.sleep(poll_interval)
-            elapsed = time.time() - start
             
         except RuntimeError:
             # Re-raise runtime errors (error states)
@@ -106,8 +109,6 @@ def wait_for_state(check_fn: Callable[[], str],
                 raise RuntimeError(f"Too many consecutive state check failures: {e}")
             
             time.sleep(poll_interval)
-    
-    raise TimeoutError(f"Timeout waiting for states {target_states}. Last state: {last_state}")
 
 
 def format_duration(seconds: float) -> str:

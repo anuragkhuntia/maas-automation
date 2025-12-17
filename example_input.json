@@ -1,6 +1,7 @@
 {
   "maas_api_url": "http://<MAAS-IP>:5240/MAAS",
   "maas_api_key": "<MAAS-API-KEY>",
+  "parallel": true,
   "actions": [
     "create_machine",
     "set_power",
