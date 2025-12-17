@@ -28,20 +28,11 @@
       "deploy_timeout": 1800,
       "cloud_init_file": "common-user-data.yaml",
       "network": {
-        "bonds": [
-          {
-            "name": "bond0",
-            "interfaces": ["eth0", "eth1"],
-            "mode": "802.3ad",
-            "mtu": 1500,
-            "lacp_rate": "fast",
-            "xmit_hash_policy": "layer3+4"
-          }
-        ],
         "interfaces": [
           {
-            "name": "bond0",
-            "ip_mode": "dhcp"
+            "name": "eth0",
+            "ip_mode": "dhcp",
+            "mtu": 1500
           }
         ]
       }

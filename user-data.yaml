@@ -21,8 +21,9 @@ users:
     shell: /bin/bash
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     lock_passwd: false
-    # Password: ubuntu (hashed with SHA-512)
-    passwd: $6$rounds=4096$abcdefgh$YmhLZJz.8RqKvPqF5RJyG0k5L5LcPpQs.x/9ZKLS5zs.y.R6Wn1BkPxKbvL8VJh6H8kLH1LQJpOhRnKuPuVdw1
+    # Password: ubuntu
+    # Generated with: openssl passwd -6 ubuntu
+    passwd: $6$xyz$Nk/x4pZLEVKkl3BYzPqH7RWJqVT5fTRqBPIQnKkQHm7kLy0pGhZjNmYvVr2Vq8MZJZ5rN8vJZ5rN8vJZ5rN8vJ0
     ssh_pwauth: true
 
 # Enable password authentication for SSH

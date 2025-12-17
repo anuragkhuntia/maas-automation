@@ -127,14 +127,28 @@ def main():
         
         system_ids = controller.execute_workflow(cfg)
         
-        log.info("\n" + "=" * 60)
+        # Final summary
+        log.info("\n" + "=" * 70)
+        log.info("WORKFLOW SUMMARY")
+        log.info("=" * 70)
+        log.info(f"Actions Completed: {', '.join(cfg.get('actions', []))}")
+        
         if system_ids:
-            log.info(f"✓ Workflow complete. Processed {len(system_ids)} machine(s)")
-            for sid in system_ids:
-                log.info(f"  - {sid}")
+            log.info(f"\nMachines Processed: {len(system_ids)}")
+            for idx, sid in enumerate(system_ids, 1):
+                # Get machine details for final summary
+                try:
+                    machine = controller.client.get_machine(sid)
+                    hostname = machine.get('hostname', 'unknown')
+                    status = machine.get('status_name', 'unknown')
+                    log.info(f"  {idx}. {hostname} ({sid}) - Status: {status}")
+                except:
+                    log.info(f"  {idx}. {sid}")
         else:
-            log.info("✓ Workflow complete.")
-        log.info("=" * 60)
+            log.info("No machines processed")
+        
+        log.info("\n✓ All operations completed successfully!")
+        log.info("=" * 70 + "\n")
         
         sys.exit(0)
 
