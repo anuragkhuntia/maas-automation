@@ -29,7 +29,7 @@ packages:
   - net-tools
 
 # Set timezone
-timezone: UTC
+timezone: Asia/Kolkata
 
 # Final message
 final_message: "System ready! Login with ubuntu/ubuntu"

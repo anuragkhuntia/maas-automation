@@ -14,16 +14,19 @@ packages:
   - net-tools
   - iperf3
 
-# Create additional users
+# Create ubuntu user with password: ubuntu
 users:
-  - name: admin
+  - name: ubuntu
     groups: sudo
     shell: /bin/bash
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     lock_passwd: false
-    passwd: $6$rounds=4096$saltsalt$hashed_password_here
-    ssh_authorized_keys:
-      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-public-key-here
+    # Password: ubuntu (hashed with SHA-512)
+    passwd: $6$rounds=4096$abcdefgh$YmhLZJz.8RqKvPqF5RJyG0k5L5LcPpQs.x/9ZKLS5zs.y.R6Wn1BkPxKbvL8VJh6H8kLH1LQJpOhRnKuPuVdw1
+    ssh_pwauth: true
+
+# Enable password authentication for SSH
+ssh_pwauth: true
 
 # Write custom files
 write_files:
@@ -65,7 +68,7 @@ runcmd:
 #       dhcp4: true
 
 # Set timezone
-timezone: America/New_York
+timezone: Asia/Kolkata
 
 # Enable/disable services
 # bootcmd:
