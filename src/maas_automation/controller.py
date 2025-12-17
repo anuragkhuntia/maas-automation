@@ -64,11 +64,15 @@ class Controller:
                     log.info(f"✓ Successfully processed machine: {system_id}")
                 else:
                     log.warning(f"Machine {machine_cfg.get('hostname')} was not processed (no system_id)")
+            except KeyboardInterrupt:
+                log.warning("Interrupted by user")
+                raise
             except Exception as e:
-                log.error(f"Failed to process machine {machine_cfg.get('hostname')}: {e}")
+                log.error(f"Failed to process machine {machine_cfg.get('hostname')}: {e}", exc_info=True)
                 log.info("Continuing with next machine...")
                 continue
         
+        log.info(f"\n✓ Completed processing {len(system_ids)} machine(s)")
         return system_ids
 
     def _execute_single_machine(self, machine_cfg: Dict, actions: list, storage_cfg: Dict,

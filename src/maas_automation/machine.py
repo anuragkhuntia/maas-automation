@@ -207,15 +207,19 @@ class MachineManager:
 
         if wait:
             log.info("Waiting for commissioning to complete...")
-            final_state = wait_for_state(
-                lambda: self.get_state(system_id),
-                target_states=["READY", "DEPLOYED"],
-                timeout=timeout,
-                poll_interval=10,
-                error_states=["FAILED_COMMISSIONING", "FAILED"]
-            )
-            log.info(f"✓ Commissioning complete: {final_state}")
-            return final_state
+            try:
+                final_state = wait_for_state(
+                    lambda: self.get_state(system_id),
+                    target_states=["READY", "DEPLOYED"],
+                    timeout=timeout,
+                    poll_interval=10,
+                    error_states=["FAILED_COMMISSIONING", "FAILED"]
+                )
+                log.info(f"✓ Commissioning complete: {final_state}")
+                return final_state
+            except Exception as e:
+                log.error(f"Commissioning wait failed: {e}")
+                raise
 
     def deploy(self, system_id: str, distro_series: Optional[str] = None, 
                user_data: Optional[str] = None, wait: bool = True, timeout: int = 1800):
@@ -233,15 +237,19 @@ class MachineManager:
 
         if wait:
             log.info("Waiting for deployment to complete...")
-            final_state = wait_for_state(
-                lambda: self.get_state(system_id),
-                target_states=["DEPLOYED"],
-                timeout=timeout,
-                poll_interval=15,
-                error_states=["FAILED_DEPLOYMENT", "FAILED"]
-            )
-            log.info(f"✓ Deployment complete: {final_state}")
-            return final_state
+            try:
+                final_state = wait_for_state(
+                    lambda: self.get_state(system_id),
+                    target_states=["DEPLOYED"],
+                    timeout=timeout,
+                    poll_interval=15,
+                    error_states=["FAILED_DEPLOYMENT", "FAILED"]
+                )
+                log.info(f"✓ Deployment complete: {final_state}")
+                return final_state
+            except Exception as e:
+                log.error(f"Deployment wait failed: {e}")
+                raise
 
     def release(self, system_id: str, erase: bool = True, wait: bool = True, timeout: int = 1800):
         """Release machine and optionally wait for completion"""
