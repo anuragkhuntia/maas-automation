@@ -57,6 +57,11 @@ class MaasClient:
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
+    
+    def close(self):
+        """Close the session"""
+        if self.session:
+            self.session.close()
 
     def _headers(self) -> Dict[str, str]:
         return {

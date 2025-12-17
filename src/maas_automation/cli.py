@@ -150,13 +150,18 @@ def main():
         log.info("\n✓ All operations completed successfully!")
         log.info("=" * 70 + "\n")
         
+        # Cleanup and exit
+        controller.client.close()
+        logging.shutdown()
         sys.exit(0)
 
     except KeyboardInterrupt:
         log.warning("\n\nInterrupted by user")
+        logging.shutdown()
         sys.exit(130)
     except Exception as e:
         log.error(f"\n\nWorkflow failed: {e}", exc_info=args.verbose)
+        logging.shutdown()
         sys.exit(1)
 
 

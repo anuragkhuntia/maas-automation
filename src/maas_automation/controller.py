@@ -72,7 +72,7 @@ class Controller:
                     machine_cfg = future_to_machine[future]
                     hostname = machine_cfg.get('hostname', 'unknown')
                     try:
-                        system_id = future.result()
+                        system_id = future.result(timeout=30)  # Add timeout to prevent hanging
                         if system_id:
                             system_ids.append(system_id)
                             log.info(f"✓ Completed: {hostname} ({system_id})")
@@ -80,6 +80,8 @@ class Controller:
                             log.warning(f"✗ Failed: {hostname} (no system_id)")
                     except Exception as e:
                         log.error(f"✗ Failed: {hostname} - {e}")
+            
+            log.info("\n✓ All parallel tasks completed")
         else:
             # Sequential processing (original behavior)
             if not parallel:
