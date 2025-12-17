@@ -194,7 +194,20 @@ class Controller:
             log.info("STEP: Deploy Machine")
             log.info("=" * 60)
             distro = machine_cfg.get('distro_series')
+            
+            # Support both inline cloud_init and external cloud_init_file
             user_data = machine_cfg.get('cloud_init')
+            cloud_init_file = machine_cfg.get('cloud_init_file')
+            
+            if cloud_init_file and not user_data:
+                try:
+                    with open(cloud_init_file, 'r') as f:
+                        user_data = f.read()
+                    log.info(f"Loaded cloud-init from: {cloud_init_file}")
+                except Exception as e:
+                    log.error(f"Failed to load cloud-init file '{cloud_init_file}': {e}")
+                    raise
+            
             wait = machine_cfg.get('wait_deployment', True)
             timeout = machine_cfg.get('deploy_timeout', 1800)
             self.machine.deploy(system_id, distro_series=distro, user_data=user_data, 

@@ -1,0 +1,75 @@
+#cloud-config
+# Example cloud-init configuration for MAAS deployment
+
+# Set hostname (optional, MAAS usually sets this)
+hostname: testpod1
+manage_etc_hosts: true
+
+# Install packages
+packages:
+  - vim
+  - htop
+  - curl
+  - git
+  - net-tools
+  - iperf3
+
+# Create additional users
+users:
+  - name: admin
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    lock_passwd: false
+    passwd: $6$rounds=4096$saltsalt$hashed_password_here
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-public-key-here
+
+# Write custom files
+write_files:
+  - path: /etc/motd
+    content: |
+      ================================================
+      Welcome to TESTPOD1
+      Deployed via MAAS Automation SDK
+      ================================================
+    permissions: '0644'
+  
+  - path: /etc/environment
+    content: |
+      ENVIRONMENT=production
+      DATACENTER=DC1
+    append: true
+    permissions: '0644'
+  
+  - path: /root/setup.sh
+    content: |
+      #!/bin/bash
+      echo "Running post-deployment setup..."
+      # Add your custom setup commands here
+    permissions: '0755'
+
+# Run commands after deployment
+runcmd:
+  - echo "Deployment started at $(date)" >> /root/deployment.log
+  - systemctl enable ssh
+  - systemctl start ssh
+  - /root/setup.sh
+  - echo "Deployment completed at $(date)" >> /root/deployment.log
+
+# Configure network (if needed beyond MAAS defaults)
+# network:
+#   version: 2
+#   ethernets:
+#     bond0:
+#       dhcp4: true
+
+# Set timezone
+timezone: America/New_York
+
+# Enable/disable services
+# bootcmd:
+#   - systemctl disable snapd
+
+# Final message
+final_message: "System deployment complete! Uptime: $UPTIME seconds"

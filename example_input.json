@@ -26,13 +26,14 @@
       "commission_timeout": 1200,
       "wait_deployment": true,
       "deploy_timeout": 1800,
+      "cloud_init_file": "common-user-data.yaml",
       "network": {
         "bonds": [
           {
             "name": "bond0",
             "interfaces": ["eth0", "eth1"],
             "mode": "802.3ad",
-            "mtu": 9000,
+            "mtu": 1500,
             "lacp_rate": "fast",
             "xmit_hash_policy": "layer3+4"
           }
@@ -40,13 +41,6 @@
         "interfaces": [
           {
             "name": "bond0",
-            "subnet": "10.0.0.0/24",
-            "ip_mode": "static",
-            "ip_address": "10.0.0.10"
-          },
-          {
-            "name": "eth2",
-            "subnet": "192.168.1.0/24",
             "ip_mode": "dhcp"
           }
         ]
@@ -67,7 +61,8 @@
       "wait_commissioning": true,
       "commission_timeout": 1200,
       "wait_deployment": true,
-      "deploy_timeout": 1800
+      "deploy_timeout": 1800,
+      "cloud_init_file": "common-user-data.yaml"
     }
   ],
   "storage": {

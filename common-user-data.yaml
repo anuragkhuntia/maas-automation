@@ -1,0 +1,35 @@
+#cloud-config
+# Common user-data configuration
+# Creates ubuntu user with password: ubuntu
+
+users:
+  - name: ubuntu
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    lock_passwd: false
+    # Password: ubuntu (hashed with SHA-512)
+    # Generate new hash with: mkpasswd -m sha-512 ubuntu
+    passwd: $6$rounds=4096$abcdefgh$YmhLZJz.8RqKvPqF5RJyG0k5L5LcPpQs.x/9ZKLS5zs.y.R6Wn1BkPxKbvL8VJh6H8kLH1LQJpOhRnKuPuVdw1
+    ssh_pwauth: true
+
+# Enable password authentication for SSH
+ssh_pwauth: true
+
+# Configure SSH
+ssh:
+  emit_keys_to_console: false
+
+# Install basic packages
+packages:
+  - vim
+  - htop
+  - curl
+  - wget
+  - net-tools
+
+# Set timezone
+timezone: UTC
+
+# Final message
+final_message: "System ready! Login with ubuntu/ubuntu"
