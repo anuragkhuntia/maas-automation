@@ -8,10 +8,11 @@ users:
     shell: /bin/bash
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     lock_passwd: false
-    # Password: ubuntu
-    # Generated with: openssl passwd -6 ubuntu
-    passwd: $6$xyz$Nk/x4pZLEVKkl3BYzPqH7RWJqVT5fTRqBPIQnKkQHm7kLy0pGhZjNmYvVr2Vq8MZJZ5rN8vJZ5rN8vJZ5rN8vJ0
-    ssh_pwauth: true
+
+# Set password using chpasswd (more reliable)
+chpasswd:
+  list: |\n    ubuntu:ubuntu
+  expire: False
 
 # Enable password authentication for SSH
 ssh_pwauth: true

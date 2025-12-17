@@ -73,14 +73,16 @@ def wait_for_state(check_fn: Callable[[], str],
     last_state = None
     consecutive_errors = 0
     max_consecutive_errors = 5
+    elapsed = 0
     
-    while time.time() - start < timeout:
+    while elapsed < timeout:
         try:
             current_state = check_fn()
             consecutive_errors = 0  # Reset error count on success
             
             if current_state != last_state:
-                log.info(f"State: {current_state}")
+                elapsed = time.time() - start
+                log.info(f"State: {current_state} (elapsed: {int(elapsed)}s / {timeout}s)")
                 last_state = current_state
             
             if current_state in target_states:
@@ -91,6 +93,7 @@ def wait_for_state(check_fn: Callable[[], str],
                 raise RuntimeError(f"Machine entered error state: {current_state}")
             
             time.sleep(poll_interval)
+            elapsed = time.time() - start
             
         except RuntimeError:
             # Re-raise runtime errors (error states)

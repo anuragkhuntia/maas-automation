@@ -217,9 +217,19 @@ class MachineManager:
                 )
                 log.info(f"✓ Commissioning complete: {final_state}")
                 return final_state
+            except TimeoutError as e:
+                # Check one last time
+                current = self.get_state(system_id)
+                if current in ["READY", "DEPLOYED"]:
+                    log.info(f"✓ Commissioning complete: {current}")
+                    return current
+                log.error(f"Commissioning timeout: {e}")
+                raise
             except Exception as e:
                 log.error(f"Commissioning wait failed: {e}")
                 raise
+        
+        return None
 
     def deploy(self, system_id: str, distro_series: Optional[str] = None, 
                user_data: Optional[str] = None, wait: bool = True, timeout: int = 1800):
@@ -247,9 +257,19 @@ class MachineManager:
                 )
                 log.info(f"✓ Deployment complete: {final_state}")
                 return final_state
+            except TimeoutError as e:
+                # Check one last time if we're actually deployed
+                current = self.get_state(system_id)
+                if current == "DEPLOYED":
+                    log.info(f"✓ Deployment complete: {current}")
+                    return current
+                log.error(f"Deployment timeout: {e}")
+                raise
             except Exception as e:
                 log.error(f"Deployment wait failed: {e}")
                 raise
+        
+        return None
 
     def release(self, system_id: str, erase: bool = True, wait: bool = True, timeout: int = 1800):
         """Release machine and optionally wait for completion"""
