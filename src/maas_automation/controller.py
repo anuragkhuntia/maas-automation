@@ -398,10 +398,11 @@ class Controller:
                     continue
                 
                 # Display interface details
-                print(f"\n{'INTERFACE':<15} {'TYPE':<10} {'MAC ADDRESS':<20} {'VLAN':<10} {'IP ADDRESS':<20} {'SUBNET':<20} {'MODE':<10}")
-                print("-" * 130)
+                print(f"\n{'ID':<8} {'INTERFACE':<15} {'TYPE':<10} {'MAC ADDRESS':<20} {'VLAN':<10} {'IP ADDRESS':<20} {'SUBNET':<20} {'MODE':<10}")
+                print("-" * 138)
                 
                 for iface in interfaces:
+                    iface_id = iface.get('id', '-')
                     iface_name = iface.get('name', '-')
                     iface_type = iface.get('type', '-')
                     mac = iface.get('mac_address', '-')
@@ -421,10 +422,10 @@ class Controller:
                             mode = link.get('mode', '-')
                             
                             status_icon = '✓' if enabled else '✗'
-                            print(f"{status_icon} {iface_name:<13} {iface_type:<10} {mac:<20} {str(vlan_id):<10} {ip_addr:<20} {subnet_cidr:<20} {mode:<10}")
+                            print(f"{str(iface_id):<8} {status_icon} {iface_name:<13} {iface_type:<10} {mac:<20} {str(vlan_id):<10} {ip_addr:<20} {subnet_cidr:<20} {mode:<10}")
                     else:
                         status_icon = '✓' if enabled else '✗'
-                        print(f"{status_icon} {iface_name:<13} {iface_type:<10} {mac:<20} {str(vlan_id):<10} {'-':<20} {'-':<20} {'-':<10}")
+                        print(f"{str(iface_id):<8} {status_icon} {iface_name:<13} {iface_type:<10} {mac:<20} {str(vlan_id):<10} {'-':<20} {'-':<20} {'-':<10}")
                 
             except Exception as e:
                 print(f"\n❌ Error getting network info for {hostname}: {e}")
