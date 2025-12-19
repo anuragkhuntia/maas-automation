@@ -91,18 +91,21 @@ class NetworkManager:
         
         log.debug(f"Interface IDs for bond: {interface_ids}")
         
-        # Create bond
-        payload = {
-            "name": bond_name,
-            "parents": interface_ids,
-            "bond_mode": bond_mode,
-            "mtu": mtu
-        }
+        # Create bond - parents must be sent as separate parameters
+        payload = [
+            ("name", bond_name),
+            ("bond_mode", bond_mode),
+            ("mtu", str(mtu))
+        ]
+        
+        # Add each parent interface ID separately
+        for iface_id in interface_ids:
+            payload.append(("parents", str(iface_id)))
         
         # Add bond parameters based on mode
         if bond_mode == "802.3ad":
-            payload["bond_lacp_rate"] = bond_config.get("lacp_rate", "fast")
-            payload["bond_xmit_hash_policy"] = bond_config.get("xmit_hash_policy", "layer3+4")
+            payload.append(("bond_lacp_rate", bond_config.get("lacp_rate", "fast")))
+            payload.append(("bond_xmit_hash_policy", bond_config.get("xmit_hash_policy", "layer3+4")))
         
         log.debug(f"Bond payload: {payload}")
         
