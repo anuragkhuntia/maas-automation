@@ -93,7 +93,7 @@ class MachineManager:
             raise
 
     def create_or_find(self, cfg: Dict) -> Dict:
-        """Find machine by serial number only and update hostname if needed"""
+        """Find machine by serial number only (without updating hostname)"""
         hostname = cfg.get("hostname")
         serial = cfg.get("serial_number")
 
@@ -114,18 +114,6 @@ class MachineManager:
         status = machine.get('status_name', 'unknown')
         
         log.info(f"✓ Found machine by serial: {current_hostname} ({system_id}) - Status: {status}")
-        
-        # Always update hostname to match what's in the JSON config
-        if hostname and current_hostname != hostname:
-            log.info(f"Updating hostname from '{current_hostname}' to '{hostname}'")
-            try:
-                machine = self.update_hostname(system_id, hostname)
-                log.info(f"✓ Hostname updated successfully")
-            except Exception as e:
-                log.error(f"Failed to update hostname: {e}")
-                raise
-        elif hostname:
-            log.info(f"Hostname already matches: {hostname}")
         
         return machine
 

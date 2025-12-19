@@ -19,6 +19,7 @@ log = logging.getLogger("maas_automation")
 VALID_ACTIONS = {
     'create_machine',
     'find_machine',
+    'set_hostname',
     'set_power',
     'set_bios',
     'set_boot_order',
@@ -41,6 +42,7 @@ def print_available_actions():
     print("\nMachine Lifecycle:")
     print("  • create_machine     - Create a new machine in MAAS")
     print("  • find_machine       - Find an existing machine")
+    print("  • set_hostname       - Set/update machine hostname")
     print("  • commission         - Commission a machine (discover hardware)")
     print("  • deploy             - Deploy OS to a machine")
     print("  • release            - Release a deployed machine")

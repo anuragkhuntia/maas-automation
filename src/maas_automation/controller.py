@@ -187,7 +187,25 @@ class Controller:
             log.error("No machine system_id available")
             return None
 
-        # Step 2: Update power configuration
+        # Step 2: Set hostname
+        if 'set_hostname' in actions:
+            log.info("=" * 60)
+            log.info("STEP: Set Hostname")
+            log.info("=" * 60)
+            hostname = machine_cfg.get('hostname')
+            if not hostname:
+                log.warning("No hostname provided in machine config")
+            else:
+                machine_obj = self.machine.get_by_id(system_id)
+                current_hostname = machine_obj.get('hostname', 'unknown')
+                if current_hostname != hostname:
+                    log.info(f"Updating hostname from '{current_hostname}' to '{hostname}'")
+                    self.machine.update_hostname(system_id, hostname)
+                else:
+                    log.info(f"Hostname already set to: {hostname}")
+            log.info("")
+
+        # Step 3: Update power configuration
         if 'set_power' in actions:
             log.info("=" * 60)
             log.info("STEP: Configure Power")
@@ -232,15 +250,17 @@ class Controller:
             self.machine.commission(system_id, scripts=scripts, wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 7: Configure network bonds - after commission, before deploy
+        # Step 8: Configure network bonds - after commission, before deploy
         if 'set_network_bond' in actions:
             log.info("=" * 60)
             log.info("STEP: Set Network Bond(s)")
             log.info("=" * 60)
             bonds_cfg = machine_cfg.get('bonds', [])
-            if not bonds_cfg:
+            log.debug(f"Bonds config from machine_cfg: {bonds_cfg}")
+            if not bonds_cfg or len(bonds_cfg) == 0:
                 log.warning("No bonds configuration provided in machine config")
             else:
+                log.info(f"Found {len(bonds_cfg)} bond(s) to configure")
                 for bond_cfg in bonds_cfg:
                     try:
                         self.network.configure_bond_by_vlan(system_id, bond_cfg)
@@ -249,7 +269,7 @@ class Controller:
                         # Continue with other bonds
             log.info("")
 
-        # Step 8: Deploy machine
+        # Step 9: Deploy machine
         if 'deploy' in actions:
             log.info("=" * 60)
             log.info("STEP: Deploy Machine")
@@ -275,7 +295,7 @@ class Controller:
                               wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 9: Release machine
+        # Step 10: Release machine
         if 'release' in actions:
             log.info("=" * 60)
             log.info("STEP: Release Machine")
@@ -286,7 +306,7 @@ class Controller:
             self.machine.release(system_id, erase=erase, wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 10: Delete machine
+        # Step 11: Delete machine
         if 'delete' in actions:
             log.info("=" * 60)
             log.info("STEP: Delete Machine")

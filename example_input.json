@@ -4,6 +4,7 @@
   "parallel": true,
   "actions": [
     "create_machine",
+    "set_hostname",
     "set_power",
     "configure_storage",
     "commission",
@@ -21,13 +22,7 @@
         "power_user": "root",
         "power_pass": "calvin123"
       },
-      "commissioning_scripts": ["45-custom-script"],
       "distro_series": "jammy",
-      "wait_commissioning": true,
-      "commission_timeout": 1200,
-      "wait_deployment": true,
-      "deploy_timeout": 1800,
-      "cloud_init_file": "common-user-data.yaml",
       "bonds": [
         {
           "name": "bond0",
@@ -52,13 +47,7 @@
         "power_user": "admin",
         "power_pass": "Cisco@123"
       },
-      "commissioning_scripts": [],
       "distro_series": "jammy",
-      "wait_commissioning": true,
-      "commission_timeout": 1200,
-      "wait_deployment": true,
-      "deploy_timeout": 1800,
-      "cloud_init_file": "common-user-data.yaml",
       "bonds": [
         {
           "name": "bond0",
@@ -88,15 +77,5 @@
       "var_log_size_g": 10,
       "tmp_size_g": 10
     }
-  },
-  "bios": {
-    "tags": ["bios-configured"],
-    "notes": "BIOS settings: UEFI boot, secure boot disabled"
-  },
-  "boot_order": ["pxe", "disk"],
-  "release": {
-    "wipe_disks": false,
-    "wait_release": true,
-    "release_timeout": 1800
   }
 }
