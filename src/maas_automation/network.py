@@ -17,11 +17,13 @@ class NetworkManager:
     def get_interfaces(self, system_id: str) -> List[Dict]:
         """Get all network interfaces for a machine"""
         try:
-            interfaces = retry(
-                lambda: self.client.request("GET", f"machines/{system_id}/", op="interfaces"),
+            # Get machine details which includes interfaces
+            machine = retry(
+                lambda: self.client.request("GET", f"machines/{system_id}"),
                 retries=self.max_retries,
                 delay=2.0
             )
+            interfaces = machine.get("interface_set", [])
             log.debug(f"Found {len(interfaces)} interfaces for {system_id}")
             return interfaces
         except Exception as e:
@@ -102,8 +104,8 @@ class NetworkManager:
             bond = retry(
                 lambda: self.client.request(
                     "POST",
-                    f"machines/{system_id}/",
-                    op="create_bond",
+                    f"machines/{system_id}",
+                    op="create-bond",
                     data=payload
                 ),
                 retries=self.max_retries,
@@ -187,8 +189,8 @@ class NetworkManager:
                     result = retry(
                         lambda: self.client.request(
                             "POST",
-                            f"machines/{system_id}/interfaces/{interface_id}/",
-                            op="link_subnet",
+                            f"machines/{system_id}/interfaces/{interface_id}",
+                            op="link-subnet",
                             data=link_payload
                         ),
                         retries=self.max_retries,
@@ -370,8 +372,8 @@ class NetworkManager:
                     retry(
                         lambda: self.client.request(
                             "POST",
-                            f"machines/{system_id}/interfaces/{interface_id}/",
-                            op="link_subnet",
+                            f"machines/{system_id}/interfaces/{interface_id}",
+                            op="link-subnet",
                             data=link_payload
                         ),
                         retries=self.max_retries,

@@ -261,12 +261,18 @@ class Controller:
                 log.warning("No bonds configuration provided in machine config")
             else:
                 log.info(f"Found {len(bonds_cfg)} bond(s) to configure")
+                bond_errors = []
                 for bond_cfg in bonds_cfg:
                     try:
                         self.network.configure_bond_by_vlan(system_id, bond_cfg)
                     except Exception as e:
-                        log.error(f"Failed to configure bond {bond_cfg.get('name')}: {e}")
-                        # Continue with other bonds
+                        error_msg = f"Failed to configure bond {bond_cfg.get('name')}: {e}"
+                        log.error(error_msg)
+                        bond_errors.append(error_msg)
+                
+                # If any bonds failed, raise an error
+                if bond_errors:
+                    raise Exception(f"Bond configuration failed for {len(bond_errors)} bond(s): " + "; ".join(bond_errors))
             log.info("")
 
         # Step 9: Deploy machine
