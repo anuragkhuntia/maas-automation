@@ -268,24 +268,32 @@ class NetworkManager:
         log.info(f"Total interfaces found: {len(interfaces)}")
         
         # Debug: Show all interfaces and their VLANs
+        log.info("Scanning all interfaces on machine:")
         for iface in interfaces:
-            iface_name = iface.get("name")
-            iface_type = iface.get("type")
-            iface_vlan = iface.get("vlan", {})
-            vlan_vid = iface_vlan.get("vid", "None")
-            log.debug(f"  Interface: {iface_name} (type: {iface_type}, VLAN: {vlan_vid})")
+            if not iface or not isinstance(iface, dict):
+                log.warning(f"Skipping invalid interface entry: {iface}")
+                continue
+            iface_name = iface.get("name", "UNKNOWN")
+            iface_type = iface.get("type", "UNKNOWN")
+            iface_vlan = iface.get("vlan")
+            if iface_vlan and isinstance(iface_vlan, dict):
+                vlan_vid = iface_vlan.get("vid", "None")
+            else:
+                vlan_vid = "None"
+            log.info(f"  - {iface_name} (type: {iface_type}, VLAN: {vlan_vid})")
         
         # Find interfaces that have access to the specified VLAN
+        log.info(f"\nSearching for interfaces with VLAN ID {vlan_id}...")
         matching_interfaces = []
         for iface in interfaces:
-            if not iface:
+            if not iface or not isinstance(iface, dict):
                 continue
                 
             iface_name = iface.get("name")
             iface_type = iface.get("type")
             
             if not iface_name:
-                log.warning(f"Skipping interface with no name: {iface}")
+                log.warning(f"Skipping interface with no name")
                 continue
             
             # Skip bond and bridge interfaces - we only want physical or VLAN interfaces
@@ -299,14 +307,14 @@ class NetworkManager:
                 if iface_vlan.get("vid") == vlan_id:
                     if iface_name not in matching_interfaces:
                         matching_interfaces.append(iface_name)
-                        log.info(f"✓ Found interface {iface_name} with VLAN {vlan_id}")
+                        log.info(f"  ✓ IDENTIFIED: {iface_name} (has VLAN {vlan_id})")
                     continue
             
             # Check if interface has links to the VLAN (fallback)
             links = iface.get("links", [])
-            if links:
+            if links and isinstance(links, list):
                 for link in links:
-                    if not link:
+                    if not link or not isinstance(link, dict):
                         continue
                     subnet = link.get("subnet")
                     if subnet and isinstance(subnet, dict):
@@ -314,19 +322,42 @@ class NetworkManager:
                         if vlan and isinstance(vlan, dict) and vlan.get("vid") == vlan_id:
                             if iface_name not in matching_interfaces:
                                 matching_interfaces.append(iface_name)
-                                log.info(f"✓ Found interface {iface_name} with VLAN {vlan_id} (via subnet link)")
+                                log.info(f"  ✓ IDENTIFIED: {iface_name} (VLAN {vlan_id} via subnet link)")
                             break
         
+        log.info(f"\n{'='*60}")
+        log.info(f"INTERFACE IDENTIFICATION SUMMARY")
+        log.info(f"{'='*60}")
+        log.info(f"Interfaces identified for bond '{bond_name}': {len(matching_interfaces)}")
+        if matching_interfaces:
+            for idx, iface_name in enumerate(matching_interfaces, 1):
+                log.info(f"  {idx}. {iface_name}")
+        else:
+            log.info("  NONE FOUND")
+        log.info(f"{'='*60}")
+        
         if len(matching_interfaces) < 2:
-            log.error(f"Not enough interfaces with VLAN {vlan_id}")
-            log.error(f"Found {len(matching_interfaces)} interface(s): {matching_interfaces}")
-            log.error("Available interfaces:")
+            log.error(f"\n{'='*60}")
+            log.error("ERROR: Not enough interfaces with matching VLAN")
+            log.error(f"{'='*60}")
+            log.error(f"Required: 2+ interfaces")
+            log.error(f"Found: {len(matching_interfaces)} interface(s)")
+            if matching_interfaces:
+                log.error(f"Identified interfaces: {', '.join(matching_interfaces)}")
+            log.error(f"\nAll available interfaces:")
             for iface in interfaces:
-                vlan_info = iface.get("vlan", {})
-                log.error(f"  - {iface.get('name')} (type: {iface.get('type')}, VLAN: {vlan_info.get('vid', 'None')})")
+                if not iface or not isinstance(iface, dict):
+                    continue
+                vlan_info = iface.get("vlan")
+                if vlan_info and isinstance(vlan_info, dict):
+                    vlan_vid = vlan_info.get("vid", "None")
+                else:
+                    vlan_vid = "None"
+                log.error(f"  - {iface.get('name', 'UNKNOWN')} (type: {iface.get('type', 'UNKNOWN')}, VLAN: {vlan_vid})")
+            log.error(f"{'='*60}")
             raise ValueError(
                 f"Found only {len(matching_interfaces)} interface(s) with VLAN {vlan_id}. "
-                f"Need at least 2 interfaces to create a bond. Found: {matching_interfaces}"
+                f"Need at least 2 interfaces to create a bond. Identified: {matching_interfaces if matching_interfaces else 'none'}"
             )
         
         log.info(f"Found {len(matching_interfaces)} interfaces with VLAN {vlan_id}: {', '.join(matching_interfaces)}")
@@ -376,6 +407,8 @@ class NetworkManager:
             payload.append(("bond_xmit_hash_policy", bond_config.get("xmit_hash_policy", "layer3+4")))
         
         log.info(f"Creating bond '{bond_name}' with mode '{bond_mode}' and MTU {mtu}")
+        log.info(f"\nCalling MAAS API to create bond...")
+        log.info(f"Endpoint: POST /api/2.0/nodes/{system_id}/interfaces/?op=create_bond")
         log.debug(f"Bond payload: {payload}")
         
         try:
