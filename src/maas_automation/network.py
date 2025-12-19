@@ -328,101 +328,54 @@ class NetworkManager:
         
         log.info(f"Found {len(matching_interfaces)} interfaces with VLAN {vlan_id}: {', '.join(matching_interfaces)}")
         
-        # Link both interfaces to subnet if specified (before creating bond)
-        subnet_name = bond_config.get("subnet")
-        if subnet_name:
-            log.info(f"Looking up subnet by name: '{subnet_name}'")
-            
-            # Find subnet by name
-            subnets = self.client.request("GET", "subnets/")
-            target_subnet = None
-            for subnet in subnets:
-                if subnet.get("name") == subnet_name:
-                    target_subnet = subnet
-                    log.info(f"Found subnet '{subnet_name}' (CIDR: {subnet.get('cidr')}, ID: {subnet['id']})")
+        # Get interface IDs for the matching interfaces
+        log.info("Extracting interface IDs for bond creation")
+        interface_ids = []
+        for iface_name in matching_interfaces:
+            for iface in interfaces:
+                if iface.get("name") == iface_name:
+                    interface_ids.append(iface["id"])
+                    log.info(f"  Interface {iface_name}: ID = {iface['id']}")
                     break
-            
-            if not target_subnet:
-                raise ValueError(f"Subnet '{subnet_name}' not found in MAAS")
-            
-            # Get IP mode
-            ip_mode = bond_config.get("ip_mode", "auto")
-            ip_address = bond_config.get("ip_address")
-            
-            # Link each interface to the subnet (only if not already assigned through fabric)
-            for iface_name in matching_interfaces:
-                iface = self.find_interface_by_name(system_id, iface_name)
-                if not iface:
-                    log.warning(f"Interface {iface_name} not found, skipping subnet link")
-                    continue
-                
-                interface_id = iface["id"]
-                
-                # Check if interface already has a subnet link through the fabric
-                existing_links = iface.get("links", [])
-                already_linked = False
-                for link in existing_links:
-                    link_subnet = link.get("subnet")
-                    if link_subnet and link_subnet.get("id") == target_subnet["id"]:
-                        already_linked = True
-                        log.info(f"Interface {iface_name} already linked to subnet '{subnet_name}', skipping")
-                        break
-                    elif link_subnet:
-                        # Check if any subnet is already assigned on the same fabric/VLAN
-                        link_vlan = link_subnet.get("vlan", {})
-                        target_vlan = target_subnet.get("vlan", {})
-                        if link_vlan.get("id") == target_vlan.get("id"):
-                            log.info(f"Interface {iface_name} already has subnet {link_subnet.get('name')} on the same VLAN, skipping")
-                            already_linked = True
-                            break
-                
-                if already_linked:
-                    continue
-                
-                try:
-                    link_payload = {
-                        "mode": ip_mode.upper(),
-                        "subnet": target_subnet["id"]
-                    }
-                    
-                    # Only set static IP on one interface if specified
-                    if ip_mode == "static" and ip_address and iface_name == matching_interfaces[0]:
-                        link_payload["ip_address"] = ip_address
-                    
-                    retry(
-                        lambda: self.client.request(
-                            "POST",
-                            f"nodes/{system_id}/interfaces/{interface_id}",
-                            op="link_subnet",
-                            data=link_payload
-                        ),
-                        retries=self.max_retries,
-                        delay=2.0
-                    )
-                    log.info(f"✓ Linked {iface_name} to subnet '{subnet_name}' (mode: {ip_mode})")
-                    
-                except Exception as e:
-                    log.error(f"Failed to link {iface_name} to subnet: {e}")
-                    raise
         
-        # Create the bond with the found interfaces
-        bond_creation_config = {
+        if len(interface_ids) != len(matching_interfaces):
+            raise ValueError(f"Failed to get IDs for all interfaces. Expected {len(matching_interfaces)}, got {len(interface_ids)}")
+        
+        # Create bond directly
+        bond_mode = bond_config.get("mode", "802.3ad")
+        mtu = bond_config.get("mtu", 1500)
+        
+        payload = {
             "name": bond_name,
-            "interfaces": matching_interfaces,
-            "mode": bond_config.get("mode", "802.3ad"),
-            "mtu": bond_config.get("mtu", 1500)
+            "parents": interface_ids,
+            "bond_mode": bond_mode,
+            "mtu": mtu
         }
         
-        # Add bond parameters
-        if "lacp_rate" in bond_config:
-            bond_creation_config["lacp_rate"] = bond_config["lacp_rate"]
-        if "xmit_hash_policy" in bond_config:
-            bond_creation_config["xmit_hash_policy"] = bond_config["xmit_hash_policy"]
+        # Add bond parameters based on mode
+        if bond_mode == "802.3ad":
+            payload["bond_lacp_rate"] = bond_config.get("lacp_rate", "fast")
+            payload["bond_xmit_hash_policy"] = bond_config.get("xmit_hash_policy", "layer3+4")
         
-        bond = self.create_bond(system_id, bond_creation_config)
+        log.info(f"Creating bond '{bond_name}' with mode '{bond_mode}'")
+        log.debug(f"Bond payload: {payload}")
         
-        log.info(f"✓ Bond '{bond_name}' configured with VLAN {vlan_id} interfaces and subnet '{subnet_name}'")
-        return bond
+        try:
+            bond = retry(
+                lambda: self.client.request(
+                    "POST",
+                    f"nodes/{system_id}/interfaces",
+                    op="create_bond",
+                    data=payload
+                ),
+                retries=self.max_retries,
+                delay=2.0
+            )
+            log.info(f"✓ Successfully created bond: {bond_name} (ID: {bond.get('id')})")
+            return bond
+        except Exception as e:
+            log.error(f"Failed to create bond '{bond_name}': {e}")
+            raise
 
     def apply_network_config(self, system_id: str, network_config: Dict) -> None:
         """
