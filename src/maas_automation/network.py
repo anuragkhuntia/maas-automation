@@ -23,7 +23,13 @@ class NetworkManager:
                 retries=self.max_retries,
                 delay=2.0
             )
+            if not machine:
+                raise ValueError(f"Failed to get machine details for {system_id}")
+            
             interfaces = machine.get("interface_set", [])
+            if interfaces is None:
+                interfaces = []
+            
             log.debug(f"Found {len(interfaces)} interfaces for {system_id}")
             return interfaces
         except Exception as e:
@@ -269,30 +275,44 @@ class NetworkManager:
         # Find interfaces that have access to the specified VLAN
         matching_interfaces = []
         for iface in interfaces:
+            if not iface:
+                continue
+                
             iface_name = iface.get("name")
             iface_type = iface.get("type")
+            
+            if not iface_name:
+                log.warning(f"Skipping interface with no name: {iface}")
+                continue
             
             # Skip bond and bridge interfaces - we only want physical or VLAN interfaces
             if iface_type in ["bond", "bridge"]:
                 log.debug(f"Skipping {iface_name} (type: {iface_type})")
                 continue
             
-            # Check if interface has links to the VLAN
-            links = iface.get("links", [])
-            for link in links:
-                subnet = link.get("subnet", {})
-                vlan = subnet.get("vlan", {})
-                if vlan.get("vid") == vlan_id:
+            # Check the interface's VLAN directly (most reliable)
+            iface_vlan = iface.get("vlan")
+            if iface_vlan and isinstance(iface_vlan, dict):
+                if iface_vlan.get("vid") == vlan_id:
                     if iface_name not in matching_interfaces:
                         matching_interfaces.append(iface_name)
-                        log.info(f"✓ Found interface {iface_name} with VLAN {vlan_id} (via link)")
-                    break
+                        log.info(f"✓ Found interface {iface_name} with VLAN {vlan_id}")
+                    continue
             
-            # Also check the interface's VLAN directly
-            if iface.get("vlan", {}).get("vid") == vlan_id:
-                if iface_name not in matching_interfaces:
-                    matching_interfaces.append(iface_name)
-                    log.info(f"✓ Found interface {iface_name} with VLAN {vlan_id} (direct)")
+            # Check if interface has links to the VLAN (fallback)
+            links = iface.get("links", [])
+            if links:
+                for link in links:
+                    if not link:
+                        continue
+                    subnet = link.get("subnet")
+                    if subnet and isinstance(subnet, dict):
+                        vlan = subnet.get("vlan")
+                        if vlan and isinstance(vlan, dict) and vlan.get("vid") == vlan_id:
+                            if iface_name not in matching_interfaces:
+                                matching_interfaces.append(iface_name)
+                                log.info(f"✓ Found interface {iface_name} with VLAN {vlan_id} (via subnet link)")
+                            break
         
         if len(matching_interfaces) < 2:
             log.error(f"Not enough interfaces with VLAN {vlan_id}")
