@@ -73,11 +73,12 @@ class MaasClient:
                 json_data: Optional[Dict] = None, op: Optional[str] = None) -> Any:
         """Make authenticated request to MAAS API"""
         endpoint = endpoint.strip("/")
-        url = f"{self.api_url}/api/2.0/{endpoint}/"
         
         # Add operation parameter if specified
         if op:
-            url = f"{url}?op={op}"
+            url = f"{self.api_url}/api/2.0/{endpoint}/?op={op}"
+        else:
+            url = f"{self.api_url}/api/2.0/{endpoint}/"
 
         headers = self._headers()
         
