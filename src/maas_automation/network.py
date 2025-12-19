@@ -19,7 +19,7 @@ class NetworkManager:
         try:
             # Get machine details which includes interfaces
             machine = retry(
-                lambda: self.client.request("GET", f"machines/{system_id}"),
+                lambda: self.client.request("GET", f"nodes/{system_id}"),
                 retries=self.max_retries,
                 delay=2.0
             )
@@ -110,8 +110,8 @@ class NetworkManager:
             bond = retry(
                 lambda: self.client.request(
                     "POST",
-                    f"machines/{system_id}",
-                    op="create-bond",
+                    f"nodes/{system_id}/interfaces",
+                    op="create_bond",
                     data=payload
                 ),
                 retries=self.max_retries,
@@ -195,8 +195,8 @@ class NetworkManager:
                     result = retry(
                         lambda: self.client.request(
                             "POST",
-                            f"machines/{system_id}/interfaces/{interface_id}",
-                            op="link-subnet",
+                            f"nodes/{system_id}/interfaces/{interface_id}",
+                            op="link_subnet",
                             data=link_payload
                         ),
                         retries=self.max_retries,
@@ -392,8 +392,8 @@ class NetworkManager:
                     retry(
                         lambda: self.client.request(
                             "POST",
-                            f"machines/{system_id}/interfaces/{interface_id}",
-                            op="link-subnet",
+                            f"nodes/{system_id}/interfaces/{interface_id}",
+                            op="link_subnet",
                             data=link_payload
                         ),
                         retries=self.max_retries,
