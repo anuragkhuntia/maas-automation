@@ -332,14 +332,23 @@ class NetworkManager:
         log.info(f"Found {len(matching_interfaces)} interfaces with VLAN {vlan_id}: {', '.join(matching_interfaces)}")
         
         # Get interface IDs for the matching interfaces
-        log.info("Extracting interface IDs for bond creation")
+        log.info("=" * 60)
+        log.info(f"BOND PARENT INTERFACES for '{bond_name}':")
+        log.info("=" * 60)
         interface_ids = []
         for iface_name in matching_interfaces:
             for iface in interfaces:
                 if iface.get("name") == iface_name:
                     interface_ids.append(iface["id"])
-                    log.info(f"  Interface {iface_name}: ID = {iface['id']}")
+                    iface_mac = iface.get("mac_address", "N/A")
+                    iface_type = iface.get("type", "N/A")
+                    log.info(f"  ✓ Parent Interface: {iface_name}")
+                    log.info(f"    - ID: {iface['id']}")
+                    log.info(f"    - MAC: {iface_mac}")
+                    log.info(f"    - Type: {iface_type}")
+                    log.info(f"    - VLAN: {vlan_id}")
                     break
+        log.info("=" * 60)
         
         if len(interface_ids) != len(matching_interfaces):
             raise ValueError(f"Failed to get IDs for all interfaces. Expected {len(matching_interfaces)}, got {len(interface_ids)}")
@@ -348,19 +357,25 @@ class NetworkManager:
         bond_mode = bond_config.get("mode", "802.3ad")
         mtu = bond_config.get("mtu", 1500)
         
-        payload = {
-            "name": bond_name,
-            "parents": interface_ids,
-            "bond_mode": bond_mode,
-            "mtu": mtu
-        }
+        # Create payload as a list of tuples for proper multipart encoding
+        payload = [
+            ("name", bond_name),
+            ("bond_mode", bond_mode),
+            ("mtu", str(mtu))
+        ]
+        
+        # Add each parent interface ID separately
+        log.info(f"Adding parent interface IDs to bond payload:")
+        for iface_id in interface_ids:
+            payload.append(("parents", str(iface_id)))
+            log.info(f"  - Adding parent ID: {iface_id}")
         
         # Add bond parameters based on mode
         if bond_mode == "802.3ad":
-            payload["bond_lacp_rate"] = bond_config.get("lacp_rate", "fast")
-            payload["bond_xmit_hash_policy"] = bond_config.get("xmit_hash_policy", "layer3+4")
+            payload.append(("bond_lacp_rate", bond_config.get("lacp_rate", "fast")))
+            payload.append(("bond_xmit_hash_policy", bond_config.get("xmit_hash_policy", "layer3+4")))
         
-        log.info(f"Creating bond '{bond_name}' with mode '{bond_mode}'")
+        log.info(f"Creating bond '{bond_name}' with mode '{bond_mode}' and MTU {mtu}")
         log.debug(f"Bond payload: {payload}")
         
         try:
@@ -374,10 +389,24 @@ class NetworkManager:
                 retries=self.max_retries,
                 delay=2.0
             )
-            log.info(f"✓ Successfully created bond: {bond_name} (ID: {bond.get('id')})")
+            log.info("=" * 60)
+            log.info(f"✓ Successfully created bond: {bond_name}")
+            log.info(f"  - Bond ID: {bond.get('id')}")
+            log.info(f"  - Bond Mode: {bond_mode}")
+            log.info(f"  - Parent Interfaces: {', '.join(matching_interfaces)}")
+            log.info(f"  - Parent IDs: {', '.join(map(str, interface_ids))}")
+            log.info("=" * 60)
             return bond
         except Exception as e:
-            log.error(f"Failed to create bond '{bond_name}': {e}")
+            log.error("=" * 60)
+            log.error(f"✗ Failed to create bond '{bond_name}'")
+            log.error(f"  Error: {e}")
+            log.error(f"  System ID: {system_id}")
+            log.error(f"  Parent Interfaces: {', '.join(matching_interfaces)}")
+            log.error(f"  Parent IDs: {', '.join(map(str, interface_ids))}")
+            log.error(f"  Bond Mode: {bond_mode}")
+            log.error(f"  Payload: {payload}")
+            log.error("=" * 60)
             raise
 
     def apply_network_config(self, system_id: str, network_config: Dict) -> None:
