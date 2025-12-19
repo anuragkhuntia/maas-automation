@@ -232,16 +232,16 @@ class Controller:
             self.machine.commission(system_id, scripts=scripts, wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 7: Configure network (bonds/interfaces) - after commission, before deploy
-        if 'configure_network' in actions:
+        # Step 7: Configure network bond - after commission, before deploy
+        if 'set_network_bond' in actions:
             log.info("=" * 60)
-            log.info("STEP: Configure Network")
+            log.info("STEP: Set Network Bond")
             log.info("=" * 60)
-            network_cfg = machine_cfg.get('network', {})
-            if not network_cfg:
-                log.warning("No network configuration provided in machine config")
+            bond_cfg = machine_cfg.get('bond', {})
+            if not bond_cfg:
+                log.warning("No bond configuration provided in machine config")
             else:
-                self.network.apply_network_config(system_id, network_cfg)
+                self.network.configure_bond_by_vlan(system_id, bond_cfg)
             log.info("")
 
         # Step 8: Deploy machine

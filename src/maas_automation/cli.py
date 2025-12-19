@@ -15,6 +15,47 @@ logging.basicConfig(
 
 log = logging.getLogger("maas_automation")
 
+# Define all valid actions
+VALID_ACTIONS = {
+    'create_machine',
+    'find_machine',
+    'set_power',
+    'set_bios',
+    'set_boot_order',
+    'configure_storage',
+    'commission',
+    'set_network_bond',
+    'deploy',
+    'release',
+    'delete',
+    'list',
+    'show_network'
+}
+
+
+def print_available_actions():
+    """Print list of all available actions"""
+    print("\n" + "=" * 60)
+    print("AVAILABLE ACTIONS")
+    print("=" * 60)
+    print("\nMachine Lifecycle:")
+    print("  • create_machine     - Create a new machine in MAAS")
+    print("  • find_machine       - Find an existing machine")
+    print("  • commission         - Commission a machine (discover hardware)")
+    print("  • deploy             - Deploy OS to a machine")
+    print("  • release            - Release a deployed machine")
+    print("  • delete             - Permanently delete a machine")
+    print("\nConfiguration:")
+    print("  • set_power          - Configure power management")
+    print("  • set_bios           - Apply BIOS/UEFI settings")
+    print("  • set_boot_order     - Configure boot device priority")
+    print("  • configure_storage  - Set up storage layout")
+    print("  • set_network_bond   - Configure network bond from VLAN interfaces")
+    print("\nInformation:")
+    print("  • list               - List all machines")
+    print("  • show_network       - Show detailed network info")
+    print("\n" + "=" * 60 + "\n")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -84,6 +125,18 @@ def main():
     if args.action:
         cfg['actions'] = [args.action]
         log.debug(f"Action overridden via CLI: {args.action}")
+
+    # Validate actions
+    specified_actions = cfg.get('actions', [])
+    if specified_actions:
+        invalid_actions = [action for action in specified_actions if action not in VALID_ACTIONS]
+        
+        if invalid_actions:
+            log.error(f"\n❌ Invalid action(s) specified: {', '.join(invalid_actions)}")
+            print_available_actions()
+            sys.exit(1)
+    else:
+        log.warning("No actions specified in configuration")
 
     # Filter machines by hostname if specified
     if args.hosts and args.hosts.lower() != 'all':

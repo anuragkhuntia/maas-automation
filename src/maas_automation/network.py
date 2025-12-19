@@ -207,6 +207,177 @@ class NetworkManager:
         updated_iface = self.find_interface_by_name(system_id, interface_name)
         return updated_iface
 
+    def configure_bond_by_vlan(self, system_id: str, bond_config: Dict) -> Dict:
+        """
+        Configure a network bond by finding interfaces with a specific VLAN ID.
+        
+        This method:
+        1. Takes a VLAN ID from the bond configuration
+        2. Finds all interfaces where this VLAN is visible
+        3. Links both interfaces to the specified subnet (if provided)
+        4. Creates a bond between those interfaces
+        
+        Args:
+            system_id: Machine system ID
+            bond_config: Bond configuration with keys:
+                - name: Bond name (e.g., "bond0")
+                - vlan_id: VLAN ID to search for in interfaces
+                - mode: Bond mode (e.g., "802.3ad", "active-backup", "balance-rr")
+                - mtu: MTU size (optional, default: 1500)
+                - subnet: Subnet name to link both interfaces to (optional)
+                - ip_mode: "static", "dhcp", or "auto" (optional)
+                - ip_address: Static IP if ip_mode is "static" (optional)
+        
+        Example config:
+        {
+            "name": "bond0",
+            "vlan_id": 100,
+            "mode": "802.3ad",
+            "mtu": 9000,
+            "subnet": "my-subnet-name",
+            "ip_mode": "static",
+            "ip_address": "10.0.0.100"
+        }
+        
+        Returns:
+            Created bond interface details
+        """
+        bond_name = bond_config.get("name")
+        vlan_id = bond_config.get("vlan_id")
+        
+        if not bond_name:
+            raise ValueError("Bond config must have 'name'")
+        if vlan_id is None:
+            raise ValueError("Bond config must have 'vlan_id'")
+        
+        log.info(f"Looking for interfaces with VLAN ID {vlan_id} on {system_id}")
+        
+        # Get all interfaces for the machine
+        interfaces = self.get_interfaces(system_id)
+        
+        # Find interfaces that have access to the specified VLAN
+        matching_interfaces = []
+        for iface in interfaces:
+            # Check if interface has links to the VLAN
+            links = iface.get("links", [])
+            for link in links:
+                subnet = link.get("subnet", {})
+                vlan = subnet.get("vlan", {})
+                if vlan.get("vid") == vlan_id:
+                    matching_interfaces.append(iface["name"])
+                    log.debug(f"Found interface {iface['name']} with VLAN {vlan_id}")
+                    break
+            
+            # Also check the interface's VLAN directly
+            if iface.get("vlan", {}).get("vid") == vlan_id:
+                if iface["name"] not in matching_interfaces:
+                    matching_interfaces.append(iface["name"])
+                    log.debug(f"Found interface {iface['name']} with VLAN {vlan_id}")
+        
+        if len(matching_interfaces) < 2:
+            raise ValueError(
+                f"Found only {len(matching_interfaces)} interface(s) with VLAN {vlan_id}. "
+                f"Need at least 2 interfaces to create a bond. Found: {matching_interfaces}"
+            )
+        
+        log.info(f"Found {len(matching_interfaces)} interfaces with VLAN {vlan_id}: {', '.join(matching_interfaces)}")
+        
+        # Link both interfaces to subnet if specified (before creating bond)
+        subnet_name = bond_config.get("subnet")
+        if subnet_name:
+            log.info(f"Looking up subnet by name: '{subnet_name}'")
+            
+            # Find subnet by name
+            subnets = self.client.request("GET", "subnets/")
+            target_subnet = None
+            for subnet in subnets:
+                if subnet.get("name") == subnet_name:
+                    target_subnet = subnet
+                    log.info(f"Found subnet '{subnet_name}' (CIDR: {subnet.get('cidr')}, ID: {subnet['id']})")
+                    break
+            
+            if not target_subnet:
+                raise ValueError(f"Subnet '{subnet_name}' not found in MAAS")
+            
+            # Get IP mode
+            ip_mode = bond_config.get("ip_mode", "auto")
+            ip_address = bond_config.get("ip_address")
+            
+            # Link each interface to the subnet (only if not already assigned through fabric)
+            for iface_name in matching_interfaces:
+                iface = self.find_interface_by_name(system_id, iface_name)
+                if not iface:
+                    log.warning(f"Interface {iface_name} not found, skipping subnet link")
+                    continue
+                
+                interface_id = iface["id"]
+                
+                # Check if interface already has a subnet link through the fabric
+                existing_links = iface.get("links", [])
+                already_linked = False
+                for link in existing_links:
+                    link_subnet = link.get("subnet")
+                    if link_subnet and link_subnet.get("id") == target_subnet["id"]:
+                        already_linked = True
+                        log.info(f"Interface {iface_name} already linked to subnet '{subnet_name}', skipping")
+                        break
+                    elif link_subnet:
+                        # Check if any subnet is already assigned on the same fabric/VLAN
+                        link_vlan = link_subnet.get("vlan", {})
+                        target_vlan = target_subnet.get("vlan", {})
+                        if link_vlan.get("id") == target_vlan.get("id"):
+                            log.info(f"Interface {iface_name} already has subnet {link_subnet.get('name')} on the same VLAN, skipping")
+                            already_linked = True
+                            break
+                
+                if already_linked:
+                    continue
+                
+                try:
+                    link_payload = {
+                        "mode": ip_mode.upper(),
+                        "subnet": target_subnet["id"]
+                    }
+                    
+                    # Only set static IP on one interface if specified
+                    if ip_mode == "static" and ip_address and iface_name == matching_interfaces[0]:
+                        link_payload["ip_address"] = ip_address
+                    
+                    retry(
+                        lambda: self.client.request(
+                            "POST",
+                            f"machines/{system_id}/interfaces/{interface_id}/",
+                            op="link_subnet",
+                            data=link_payload
+                        ),
+                        retries=self.max_retries,
+                        delay=2.0
+                    )
+                    log.info(f"✓ Linked {iface_name} to subnet '{subnet_name}' (mode: {ip_mode})")
+                    
+                except Exception as e:
+                    log.error(f"Failed to link {iface_name} to subnet: {e}")
+                    raise
+        
+        # Create the bond with the found interfaces
+        bond_creation_config = {
+            "name": bond_name,
+            "interfaces": matching_interfaces,
+            "mode": bond_config.get("mode", "802.3ad"),
+            "mtu": bond_config.get("mtu", 1500)
+        }
+        
+        # Add bond parameters
+        if "lacp_rate" in bond_config:
+            bond_creation_config["lacp_rate"] = bond_config["lacp_rate"]
+        if "xmit_hash_policy" in bond_config:
+            bond_creation_config["xmit_hash_policy"] = bond_config["xmit_hash_policy"]
+        
+        bond = self.create_bond(system_id, bond_creation_config)
+        
+        log.info(f"✓ Bond '{bond_name}' configured with VLAN {vlan_id} interfaces and subnet '{subnet_name}'")
+        return bond
+
     def apply_network_config(self, system_id: str, network_config: Dict) -> None:
         """
         Apply complete network configuration to a machine.
