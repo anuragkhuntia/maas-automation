@@ -321,3 +321,82 @@ class Controller:
         
         print("=" * 105)
         print(f"Total: {len(machines)} machines\n")
+    
+    def show_network_info(self, cfg: Dict):
+        """Show detailed network information for machines"""
+        machines_cfg = cfg.get('machines', [])
+        
+        if not machines_cfg:
+            log.error("No machines defined in configuration")
+            return
+        
+        print("\n" + "=" * 130)
+        print("NETWORK CONFIGURATION DETAILS")
+        print("=" * 130)
+        
+        for machine_cfg in machines_cfg:
+            hostname = machine_cfg.get('hostname', 'unknown')
+            serial = machine_cfg.get('serial_number')
+            
+            # Find machine
+            try:
+                if serial:
+                    machine = self.machine.find_by_serial(serial)
+                elif hostname:
+                    machine = self.machine.find_by_hostname(hostname)
+                else:
+                    continue
+                
+                if not machine:
+                    print(f"\n❌ Machine not found: {hostname}")
+                    continue
+                
+                system_id = machine['system_id']
+                status = machine.get('status_name', 'unknown')
+                
+                print(f"\n{'='*130}")
+                print(f"Machine: {hostname} ({system_id}) - Status: {status}")
+                print(f"{'='*130}")
+                
+                # Get detailed machine info with interfaces
+                machine_detail = self.client.get_machine(system_id)
+                interfaces = machine_detail.get('interface_set', [])
+                
+                if not interfaces:
+                    print("  No network interfaces found")
+                    continue
+                
+                # Display interface details
+                print(f"\n{'INTERFACE':<15} {'TYPE':<10} {'MAC ADDRESS':<20} {'VLAN':<10} {'IP ADDRESS':<20} {'SUBNET':<20} {'MODE':<10}")
+                print("-" * 130)
+                
+                for iface in interfaces:
+                    iface_name = iface.get('name', '-')
+                    iface_type = iface.get('type', '-')
+                    mac = iface.get('mac_address', '-')
+                    enabled = iface.get('enabled', False)
+                    
+                    # Get VLAN info
+                    vlan = iface.get('vlan', {})
+                    vlan_id = vlan.get('vid', '-') if vlan else '-'
+                    
+                    # Get IP addresses
+                    links = iface.get('links', [])
+                    if links:
+                        for link in links:
+                            ip_addr = link.get('ip_address', '-')
+                            subnet = link.get('subnet', {})
+                            subnet_cidr = subnet.get('cidr', '-') if subnet else '-'
+                            mode = link.get('mode', '-')
+                            
+                            status_icon = '✓' if enabled else '✗'
+                            print(f"{status_icon} {iface_name:<13} {iface_type:<10} {mac:<20} {str(vlan_id):<10} {ip_addr:<20} {subnet_cidr:<20} {mode:<10}")
+                    else:
+                        status_icon = '✓' if enabled else '✗'
+                        print(f"{status_icon} {iface_name:<13} {iface_type:<10} {mac:<20} {str(vlan_id):<10} {'-':<20} {'-':<20} {'-':<10}")
+                
+            except Exception as e:
+                print(f"\n❌ Error getting network info for {hostname}: {e}")
+                continue
+        
+        print("\n" + "=" * 130 + "\n")

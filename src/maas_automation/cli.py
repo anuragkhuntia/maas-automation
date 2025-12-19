@@ -123,7 +123,14 @@ def main():
         # Special action: list machines
         if 'list' in cfg.get('actions', []):
             controller.list_machines()
-            sys.exit(0)
+            import os
+            os._exit(0)
+        
+        # Special action: show network info
+        if 'show_network' in cfg.get('actions', []):
+            controller.show_network_info(cfg)
+            import os
+            os._exit(0)
         
         system_ids = controller.execute_workflow(cfg)
         
@@ -150,10 +157,17 @@ def main():
         log.info("\n✓ All operations completed successfully!")
         log.info("=" * 70 + "\n")
         
-        # Cleanup and exit
-        controller.client.close()
+        # Cleanup and force exit
+        try:
+            controller.client.close()
+        except:
+            pass
+        
         logging.shutdown()
-        sys.exit(0)
+        
+        # Force immediate exit (don't wait for threads)
+        import os
+        os._exit(0)
 
     except KeyboardInterrupt:
         log.warning("\n\nInterrupted by user")
