@@ -7,7 +7,7 @@
     "set_power",
     "configure_storage",
     "commission",
-    "configure_network",
+    "set_network_bond",
     "deploy"
   ],
   "machines": [
@@ -28,15 +28,19 @@
       "wait_deployment": true,
       "deploy_timeout": 1800,
       "cloud_init_file": "common-user-data.yaml",
-      "network": {
-        "interfaces": [
-          {
-            "name": "eth0",
-            "ip_mode": "dhcp",
-            "mtu": 1500
-          }
-        ]
-      }
+      "bonds": [
+        {
+          "name": "bond0",
+          "vlan_id": 100,
+          "mode": "802.3ad",
+          "mtu": 9000,
+          "lacp_rate": "fast",
+          "xmit_hash_policy": "layer3+4",
+          "subnet": "my-subnet-name",
+          "ip_mode": "static",
+          "ip_address": "10.0.0.100"
+        }
+      ]
     },
     {
       "hostname": "WZP293393H8",
@@ -54,7 +58,23 @@
       "commission_timeout": 1200,
       "wait_deployment": true,
       "deploy_timeout": 1800,
-      "cloud_init_file": "common-user-data.yaml"
+      "cloud_init_file": "common-user-data.yaml",
+      "bonds": [
+        {
+          "name": "bond0",
+          "vlan_id": 200,
+          "mode": "active-backup",
+          "mtu": 1500,
+          "subnet": "another-subnet",
+          "ip_mode": "dhcp"
+        },
+        {
+          "name": "bond1",
+          "vlan_id": 300,
+          "mode": "802.3ad",
+          "mtu": 9000
+        }
+      ]
     }
   ],
   "storage": {
