@@ -444,12 +444,12 @@ class NetworkManager:
             log.info(f"  - Parent IDs: {', '.join(map(str, interface_ids))}")
             log.info("=" * 60)
             
-            # Configure subnet if specified
+            # Configure subnet if specified - only if both subnet and ip_mode are provided
             subnet_name = bond_config.get("subnet")
-            ip_mode = bond_config.get("ip_mode", "automatic")
+            ip_mode = bond_config.get("ip_mode")
             ip_address = bond_config.get("ip_address")
             
-            if subnet_name:
+            if subnet_name and ip_mode:
                 log.info(f"\nConfiguring subnet for bond '{bond_name}'...")
                 try:
                     # Find subnet by name
@@ -493,6 +493,9 @@ class NetworkManager:
                     log.error(f"✗ Failed to link subnet '{subnet_name}' to bond: {subnet_error}")
                     log.warning(f"Bond '{bond_name}' created but subnet linking failed")
                     # Don't raise - bond was created successfully, just subnet linking failed
+            elif subnet_name and not ip_mode:
+                log.info(f"⚠ Subnet '{subnet_name}' specified but no ip_mode provided - skipping subnet configuration")
+                log.info(f"  To configure subnet, add 'ip_mode' field with value: 'static', 'dynamic', or 'automatic'")
             
             return bond
         except Exception as e:
