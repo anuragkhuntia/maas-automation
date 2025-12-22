@@ -44,6 +44,20 @@ class NetworkManager:
                 return iface
         return None
 
+    def find_subnet_by_name(self, subnet_name: str) -> Optional[Dict]:
+        """Find a subnet by its name"""
+        try:
+            subnets = self.client.request("GET", "subnets/")
+            for subnet in subnets:
+                if subnet.get("name") == subnet_name:
+                    log.debug(f"Found subnet '{subnet_name}' with ID {subnet['id']} (CIDR: {subnet.get('cidr')})")
+                    return subnet
+            log.warning(f"Subnet '{subnet_name}' not found in MAAS")
+            return None
+        except Exception as e:
+            log.error(f"Failed to search for subnet '{subnet_name}': {e}")
+            return None
+
     def create_bond(self, system_id: str, bond_config: Dict) -> Dict:
         """
         Create a network bond from multiple interfaces.
@@ -429,6 +443,57 @@ class NetworkManager:
             log.info(f"  - Parent Interfaces: {', '.join(matching_interfaces)}")
             log.info(f"  - Parent IDs: {', '.join(map(str, interface_ids))}")
             log.info("=" * 60)
+            
+            # Configure subnet if specified
+            subnet_name = bond_config.get("subnet")
+            ip_mode = bond_config.get("ip_mode", "auto")
+            ip_address = bond_config.get("ip_address")
+            
+            if subnet_name:
+                log.info(f"\nConfiguring subnet for bond '{bond_name}'...")
+                try:
+                    # Find subnet by name
+                    target_subnet = self.find_subnet_by_name(subnet_name)
+                    
+                    if not target_subnet:
+                        log.error(f"✗ Subnet '{subnet_name}' not found in MAAS")
+                        log.warning(f"Bond '{bond_name}' created but subnet not linked")
+                    else:
+                        # Link bond to subnet
+                        link_payload = {
+                            "mode": ip_mode.upper(),
+                            "subnet": target_subnet["id"]
+                        }
+                        
+                        if ip_mode == "static" and ip_address:
+                            link_payload["ip_address"] = ip_address
+                        
+                        log.info(f"Linking bond to subnet '{subnet_name}' (mode: {ip_mode})...")
+                        retry(
+                            lambda: self.client.request(
+                                "POST",
+                                f"nodes/{system_id}/interfaces/{bond['id']}",
+                                op="link_subnet",
+                                data=link_payload
+                            ),
+                            retries=self.max_retries,
+                            delay=2.0
+                        )
+                        log.info(f"✓ Linked bond '{bond_name}' to subnet '{subnet_name}'")
+                        log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
+                        log.info(f"  - IP Mode: {ip_mode}")
+                        if ip_mode == "static" and ip_address:
+                            log.info(f"  - Static IP: {ip_address}")
+                        elif ip_mode == "dhcp":
+                            log.info(f"  - IP will be assigned via DHCP")
+                        elif ip_mode == "auto":
+                            log.info(f"  - IP will be auto-assigned")
+                        
+                except Exception as subnet_error:
+                    log.error(f"✗ Failed to link subnet '{subnet_name}' to bond: {subnet_error}")
+                    log.warning(f"Bond '{bond_name}' created but subnet linking failed")
+                    # Don't raise - bond was created successfully, just subnet linking failed
+            
             return bond
         except Exception as e:
             log.error("=" * 60)
