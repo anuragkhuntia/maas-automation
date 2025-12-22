@@ -33,7 +33,8 @@
           "xmit_hash_policy": "layer3+4",
           "subnet": "my-subnet-name",
           "ip_mode": "static",
-          "ip_address": "10.0.0.100"
+          "ip_address": "10.0.0.100",
+          "comment": "ip_mode options: static (requires ip_address), dynamic (DHCP), automatic (auto-assign)"
         }
       ]
     },
@@ -55,7 +56,7 @@
           "mode": "active-backup",
           "mtu": 1500,
           "subnet": "another-subnet",
-          "ip_mode": "dhcp"
+          "ip_mode": "dynamic"
         },
         {
           "name": "bond1",

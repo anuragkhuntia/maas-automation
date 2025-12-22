@@ -71,7 +71,7 @@ class NetworkManager:
                 - mtu: MTU size (optional, default: 1500)
                 - vlan: VLAN ID (optional)
                 - subnet: Subnet CIDR for IP assignment (optional)
-                - ip_mode: "static", "dhcp", or "auto" (optional, default: "auto")
+                - ip_mode: "static", "dynamic", or "automatic" (optional, default: "automatic")
                 - ip_address: Static IP if ip_mode is "static" (optional)
         
         Returns:
@@ -149,7 +149,7 @@ class NetworkManager:
             interface_config: Interface configuration with keys:
                 - name: Interface name (e.g., "eth0", "bond0")
                 - subnet: Subnet CIDR for IP assignment (e.g., "10.0.0.0/24")
-                - ip_mode: "static", "dhcp", or "auto" (default: "auto")
+                - ip_mode: "static", "dynamic", or "automatic" (default: "automatic")
                 - ip_address: Static IP if ip_mode is "static"
                 - vlan: VLAN ID (optional)
                 - mtu: MTU size (optional)
@@ -159,7 +159,7 @@ class NetworkManager:
         """
         interface_name = interface_config.get("name")
         subnet_cidr = interface_config.get("subnet")
-        ip_mode = interface_config.get("ip_mode", "auto")
+        ip_mode = interface_config.get("ip_mode", "automatic")
         ip_address = interface_config.get("ip_address")
         
         if not interface_name:
@@ -250,7 +250,7 @@ class NetworkManager:
                 - mode: Bond mode (e.g., "802.3ad", "active-backup", "balance-rr")
                 - mtu: MTU size (optional, default: 1500)
                 - subnet: Subnet name to link both interfaces to (optional)
-                - ip_mode: "static", "dhcp", or "auto" (optional)
+                - ip_mode: "static", "dynamic", or "automatic" (optional, default: "automatic")
                 - ip_address: Static IP if ip_mode is "static" (optional)
         
         Example config:
@@ -446,7 +446,7 @@ class NetworkManager:
             
             # Configure subnet if specified
             subnet_name = bond_config.get("subnet")
-            ip_mode = bond_config.get("ip_mode", "auto")
+            ip_mode = bond_config.get("ip_mode", "automatic")
             ip_address = bond_config.get("ip_address")
             
             if subnet_name:
@@ -484,10 +484,10 @@ class NetworkManager:
                         log.info(f"  - IP Mode: {ip_mode}")
                         if ip_mode == "static" and ip_address:
                             log.info(f"  - Static IP: {ip_address}")
-                        elif ip_mode == "dhcp":
-                            log.info(f"  - IP will be assigned via DHCP")
-                        elif ip_mode == "auto":
-                            log.info(f"  - IP will be auto-assigned")
+                        elif ip_mode == "dynamic":
+                            log.info(f"  - IP will be assigned via DHCP (dynamic)")
+                        elif ip_mode == "automatic":
+                            log.info(f"  - IP will be auto-assigned (automatic)")
                         
                 except Exception as subnet_error:
                     log.error(f"✗ Failed to link subnet '{subnet_name}' to bond: {subnet_error}")
