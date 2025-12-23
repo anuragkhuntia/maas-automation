@@ -1,0 +1,178 @@
+stages:
+  - list
+  - set-hostname
+  - show-network
+  - network-bond
+  - deploy
+
+variables:
+  MAAS_CONFIG: "example_input.json"
+  PYTHON_VERSION: "3.9"
+
+# Default configuration for all jobs
+default:
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install --upgrade pip
+    - pip install -e .
+    - echo "MAAS Automation SDK installed"
+  tags:
+    - docker
+
+# ============================================
+# Stage 1: List Machines
+# ============================================
+list-machines:
+  stage: list
+  script:
+    - echo "Listing all machines in MAAS..."
+    - maas-automation --config ${MAAS_CONFIG} --actions list_machines
+  allow_failure: false
+  artifacts:
+    reports:
+      dotenv: machine-list.env
+    expire_in: 1 week
+  only:
+    - branches
+  except:
+    - main
+
+list-machines-summary:
+  stage: list
+  script:
+    - echo "Getting machine summary..."
+    - maas-automation --config ${MAAS_CONFIG} --actions find_machine
+  allow_failure: true
+  when: manual
+
+# ============================================
+# Stage 2: Set Hostname
+# ============================================
+set-hostname:
+  stage: set-hostname
+  script:
+    - echo "Setting hostname for machines..."
+    - maas-automation --config ${MAAS_CONFIG} --actions set_hostname
+  dependencies:
+    - list-machines
+  needs:
+    - job: list-machines
+      optional: true
+  allow_failure: false
+  only:
+    - branches
+
+# ============================================
+# Stage 3: Show Network Configuration
+# ============================================
+show-network:
+  stage: show-network
+  script:
+    - echo "Displaying network configuration..."
+    - maas-automation --config ${MAAS_CONFIG} --actions find_machine
+    - echo "Network interfaces will be displayed in logs"
+  dependencies:
+    - set-hostname
+  needs:
+    - job: set-hostname
+      optional: true
+  allow_failure: true
+  artifacts:
+    paths:
+      - network-config.log
+    expire_in: 1 week
+
+# ============================================
+# Stage 4: Configure Network Bonds
+# ============================================
+configure-network-bond:
+  stage: network-bond
+  script:
+    - echo "Configuring network bonds..."
+    - maas-automation --config ${MAAS_CONFIG} --actions set_network_bond
+  dependencies:
+    - show-network
+  needs:
+    - job: show-network
+      optional: true
+  allow_failure: false
+  retry:
+    max: 2
+    when:
+      - script_failure
+  only:
+    - branches
+
+validate-bond-config:
+  stage: network-bond
+  script:
+    - echo "Validating bond configuration..."
+    - python3 -c "import json; config=json.load(open('${MAAS_CONFIG}')); print(f\"Found {len(config.get('machines', []))} machines\"); [print(f\"  - {m.get('hostname')}: {len(m.get('bonds', []))} bonds\") for m in config.get('machines', [])]"
+  allow_failure: true
+  when: manual
+
+# ============================================
+# Stage 5: Deploy Machines
+# ============================================
+deploy-machines:
+  stage: deploy
+  script:
+    - echo "Deploying machines with full configuration..."
+    - maas-automation --config ${MAAS_CONFIG} --actions create_machine,set_hostname,set_power,configure_storage,commission,set_network_bond,deploy
+  dependencies:
+    - configure-network-bond
+  needs:
+    - job: configure-network-bond
+  allow_failure: false
+  when: manual
+  timeout: 2h
+  retry:
+    max: 1
+    when:
+      - script_failure
+
+deploy-commissioning-only:
+  stage: deploy
+  script:
+    - echo "Running commissioning only..."
+    - maas-automation --config ${MAAS_CONFIG} --actions create_machine,set_hostname,set_power,commission
+  when: manual
+  allow_failure: false
+
+deploy-with-storage:
+  stage: deploy
+  script:
+    - echo "Deploying with storage configuration..."
+    - maas-automation --config ${MAAS_CONFIG} --actions create_machine,set_hostname,set_power,configure_storage,commission,deploy
+  when: manual
+  allow_failure: false
+
+# ============================================
+# Additional Jobs
+# ============================================
+validate-config:
+  stage: .pre
+  script:
+    - echo "Validating configuration file..."
+    - python3 -m json.tool ${MAAS_CONFIG} > /dev/null
+    - echo "✓ Configuration file is valid JSON"
+  allow_failure: false
+
+dry-run:
+  stage: .pre
+  script:
+    - echo "Dry run - validating all actions..."
+    - cat ${MAAS_CONFIG}
+    - python3 -c "import json; config=json.load(open('${MAAS_CONFIG}')); print('Actions:', config.get('actions', [])); print('Machines:', len(config.get('machines', [])))"
+  when: manual
+  allow_failure: true
+
+cleanup-machines:
+  stage: .post
+  script:
+    - echo "Cleaning up - releasing machines..."
+    - maas-automation --config ${MAAS_CONFIG} --actions release,delete_machine
+  when: manual
+  allow_failure: true
+  only:
+    - branches
