@@ -52,7 +52,7 @@ class ReservedIPManager:
         Args:
             config: Reserved IP configuration with keys:
                 - ip: IP address to reserve (required)
-                - mac: MAC address (optional)
+                - mac: MAC address (required)
                 - subnet: Subnet ID (numeric) or subnet name (string) (optional)
                 - comment: Comment describing the reservation (optional)
         
@@ -63,13 +63,13 @@ class ReservedIPManager:
         if not ip_address:
             raise ValueError("Reserved IP config must have 'ip' address")
         
+        mac_address = config.get("mac")
+        if not mac_address:
+            raise ValueError("Reserved IP config must have 'mac' address - MAC address is required by MAAS")
+        
         log.info(f"Creating reserved IP: {ip_address}")
         
-        payload = {"ip": ip_address}
-        
-        # Only add MAC if it's provided and not empty
-        if config.get("mac"):
-            payload["mac"] = config["mac"]
+        payload = {"ip": ip_address, "mac": mac_address}
         
         # Handle subnet - accept either ID (int) or name (string)
         if "subnet" in config:
