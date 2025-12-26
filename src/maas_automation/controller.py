@@ -264,15 +264,33 @@ class Controller:
             else:
                 log.info(f"Found {len(bonds_cfg)} bond(s) to configure")
                 bond_errors = []
-                for bond_cfg in bonds_cfg:
+                skipped_bonds = []
+                for idx, bond_cfg in enumerate(bonds_cfg, 1):
+                    bond_name = bond_cfg.get('name', f'bond#{idx}')
                     try:
+                        log.info(f"Configuring bond {idx}/{len(bonds_cfg)}: {bond_name}")
                         self.network.configure_bond_by_vlan(system_id, bond_cfg)
+                        log.info(f"✓ Successfully configured bond: {bond_name}")
+                    except ValueError as e:
+                        # Handle "already exists" errors without failing
+                        error_msg = str(e)
+                        if "already exists" in error_msg:
+                            log.warning(f"Bond '{bond_name}' already exists - skipping")
+                            skipped_bonds.append(bond_name)
+                        else:
+                            error_msg = f"Failed to configure bond {bond_name}: {e}"
+                            log.error(error_msg)
+                            bond_errors.append(error_msg)
                     except Exception as e:
-                        error_msg = f"Failed to configure bond {bond_cfg.get('name')}: {e}"
+                        error_msg = f"Failed to configure bond {bond_name}: {e}"
                         log.error(error_msg)
                         bond_errors.append(error_msg)
                 
-                # If any bonds failed, raise an error
+                # Summary
+                if skipped_bonds:
+                    log.info(f"⚠️  Skipped {len(skipped_bonds)} existing bond(s): {', '.join(skipped_bonds)}")
+                
+                # If any bonds failed (not just skipped), raise an error
                 if bond_errors:
                     raise Exception(f"Bond configuration failed for {len(bond_errors)} bond(s): " + "; ".join(bond_errors))
             log.info("")

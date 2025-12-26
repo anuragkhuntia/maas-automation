@@ -124,21 +124,23 @@ class NetworkManager:
         log.debug(f"Bond payload: {payload}")
         
         try:
-            bond = retry(
-                lambda: self.client.request(
-                    "POST",
-                    f"nodes/{system_id}/interfaces",
-                    op="create_bond",
-                    data=payload
-                ),
-                retries=self.max_retries,
-                delay=2.0
+            bond = self.client.request(
+                "POST",
+                f"nodes/{system_id}/interfaces",
+                op="create_bond",
+                data=payload
             )
             log.info(f"✓ Created bond: {bond_name} (ID: {bond['id']})")
             return bond
         except Exception as e:
-            log.error(f"Failed to create bond '{bond_name}': {e}")
-            raise
+            error_msg = str(e)
+            # Check if bond already exists
+            if "already" in error_msg.lower() or "exists" in error_msg.lower() or "duplicate" in error_msg.lower():
+                log.warning(f"Bond '{bond_name}' already exists on machine {system_id}")
+                raise ValueError(f"Bond '{bond_name}' already exists")
+            else:
+                log.error(f"Failed to create bond '{bond_name}': {e}")
+                raise
 
     def create_vlan_interface(self, system_id: str, parent_id: int, vlan_id: int, parent_name: str) -> Dict:
         """
