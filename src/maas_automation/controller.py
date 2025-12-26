@@ -454,6 +454,37 @@ class Controller:
         print("=" * 100)
         print(f"Total: {len(snippets)} DHCP snippets\n")
     
+    def list_subnets(self):
+        """List all subnets in MAAS"""
+        try:
+            subnets = self.client.list_subnets()
+            
+            if not subnets:
+                print("\nNo subnets found in MAAS\n")
+                return
+            
+            print("\n" + "=" * 130)
+            print(f"{'ID':<6} {'NAME':<25} {'CIDR':<20} {'VLAN':<15} {'GATEWAY':<20} {'DNS':<20} {'MANAGED':<10}")
+            print("=" * 130)
+            
+            for subnet in subnets:
+                subnet_id = str(subnet.get('id', '-'))
+                name = subnet.get('name', '-')
+                cidr = subnet.get('cidr', '-')
+                vlan = subnet.get('vlan', {})
+                vlan_name = vlan.get('name', '-') if isinstance(vlan, dict) else str(vlan)
+                gateway_ip = subnet.get('gateway_ip', '-')
+                dns_servers = ', '.join(subnet.get('dns_servers', [])) or '-'
+                managed = 'Yes' if subnet.get('managed', False) else 'No'
+                
+                print(f"{subnet_id:<6} {name:<25} {cidr:<20} {vlan_name:<15} {gateway_ip:<20} {dns_servers:<20} {managed:<10}")
+            
+            print("=" * 130)
+            print(f"Total: {len(subnets)} subnets\n")
+        except Exception as e:
+            log.error(f"Failed to list subnets: {e}")
+            print(f"\n❌ Failed to list subnets: {e}\n")
+    
     def list_reserved_ips(self):
         """List all reserved IP addresses using the new reservedips endpoint"""
         try:
