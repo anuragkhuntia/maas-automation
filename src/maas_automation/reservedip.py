@@ -53,7 +53,7 @@ class ReservedIPManager:
             config: Reserved IP configuration with keys:
                 - ip: IP address to reserve (required)
                 - mac: MAC address (optional)
-                - subnet: Subnet ID (optional)
+                - subnet: Subnet ID (numeric) or subnet name (string) (optional)
                 - comment: Comment describing the reservation (optional)
         
         Returns:
@@ -69,8 +69,29 @@ class ReservedIPManager:
         
         if "mac" in config:
             payload["mac"] = config["mac"]
+        
+        # Handle subnet - accept either ID (int) or name (string)
         if "subnet" in config:
-            payload["subnet"] = config["subnet"]
+            subnet_value = config["subnet"]
+            if isinstance(subnet_value, str):
+                # Look up subnet by name
+                log.debug(f"Looking up subnet by name: {subnet_value}")
+                subnets = self.client.list_subnets()
+                subnet_id = None
+                for subnet in subnets:
+                    if subnet.get('name') == subnet_value:
+                        subnet_id = subnet.get('id')
+                        log.debug(f"Found subnet '{subnet_value}' with ID {subnet_id}")
+                        break
+                
+                if subnet_id is None:
+                    raise ValueError(f"Subnet '{subnet_value}' not found in MAAS")
+                
+                payload["subnet"] = subnet_id
+            else:
+                # Assume it's an ID
+                payload["subnet"] = subnet_value
+        
         if "comment" in config:
             payload["comment"] = config["comment"]
         

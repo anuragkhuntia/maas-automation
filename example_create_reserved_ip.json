@@ -4,10 +4,18 @@
   "actions": [
     "create_reserved_ip"
   ],
-  "reserved_ip": {
-    "ip": "192.168.1.100",
-    "mac": "00:11:22:33:44:55",
-    "subnet": 1,
-    "comment": "Reserved for production server"
-  }
+  "reserved_ip": [
+    {
+      "ip": "192.168.1.100",
+      "mac": "00:11:22:33:44:55",
+      "subnet": "default",
+      "comment": "Reserved for production server"
+    },
+    {
+      "ip": "192.168.1.101",
+      "mac": "00:11:22:33:44:66",
+      "subnet": "default",
+      "comment": "Reserved for backup server"
+    }
+  ]
 }

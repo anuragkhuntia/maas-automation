@@ -592,31 +592,46 @@ class Controller:
             print(f"\n❌ Failed to get reserved IP {reserved_ip_id}: {e}\n")
     
     def create_reserved_ip_from_config(self, config: Dict):
-        """Create a reserved IP from configuration"""
-        try:
-            reserved_ip = self.reservedip.create(config)
-            
-            print("\n" + "=" * 80)
-            print("✓ RESERVED IP CREATED")
-            print("=" * 80)
-            print(f"ID:            {reserved_ip.get('id')}")
-            print(f"IP Address:    {reserved_ip.get('ip')}")
-            print(f"MAC Address:   {reserved_ip.get('mac_address', '-')}")
-            
-            subnet = reserved_ip.get('subnet', {})
-            if isinstance(subnet, dict):
-                print(f"Subnet:        {subnet.get('cidr', '-')}")
-            else:
-                print(f"Subnet:        {subnet}")
-            
-            print(f"Comment:       {reserved_ip.get('comment', '-')}")
-            print("=" * 80 + "\n")
-            
-            return reserved_ip.get('id')
-        except Exception as e:
-            log.error(f"Failed to create reserved IP: {e}")
-            print(f"\n❌ Failed to create reserved IP: {e}\n")
-            raise
+        """Create reserved IP(s) from configuration - supports both single object and array"""
+        # Support both single object and array
+        reserved_ips_config = config
+        if not isinstance(config, list):
+            reserved_ips_config = [config]
+        
+        created_ids = []
+        
+        for idx, ip_config in enumerate(reserved_ips_config, 1):
+            try:
+                log.info(f"Creating reserved IP {idx}/{len(reserved_ips_config)}")
+                reserved_ip = self.reservedip.create(ip_config)
+                
+                print("\n" + "=" * 80)
+                print(f"✓ RESERVED IP CREATED ({idx}/{len(reserved_ips_config)})")
+                print("=" * 80)
+                print(f"ID:            {reserved_ip.get('id')}")
+                print(f"IP Address:    {reserved_ip.get('ip')}")
+                print(f"MAC Address:   {reserved_ip.get('mac_address', '-')}")
+                
+                subnet = reserved_ip.get('subnet', {})
+                if isinstance(subnet, dict):
+                    print(f"Subnet:        {subnet.get('cidr', '-')}")
+                else:
+                    print(f"Subnet:        {subnet}")
+                
+                print(f"Comment:       {reserved_ip.get('comment', '-')}")
+                print("=" * 80 + "\n")
+                
+                created_ids.append(reserved_ip.get('id'))
+            except Exception as e:
+                log.error(f"Failed to create reserved IP {idx}: {e}")
+                print(f"\n❌ Failed to create reserved IP {idx}: {e}\n")
+                # Continue with next IP instead of raising
+                continue
+        
+        if created_ids:
+            print(f"\n✓ Successfully created {len(created_ids)}/{len(reserved_ips_config)} reserved IP(s)\n")
+        
+        return created_ids
     
     def update_reserved_ip_from_config(self, reserved_ip_id: int, config: Dict):
         """Update a reserved IP from configuration"""
