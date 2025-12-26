@@ -1,0 +1,8 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "delete_reserved_ip"
+  ],
+  "reserved_ip_id": 1
+}

@@ -1,0 +1,7 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "list_reserved_ips"
+  ]
+}

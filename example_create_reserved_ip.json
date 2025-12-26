@@ -1,0 +1,13 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "create_reserved_ip"
+  ],
+  "reserved_ip": {
+    "ip": "192.168.1.100",
+    "mac": "00:11:22:33:44:55",
+    "subnet": 1,
+    "comment": "Reserved for production server"
+  }
+}

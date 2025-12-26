@@ -170,3 +170,24 @@ class MaasClient:
     def get_subnet_reserved_ips(self, subnet_id: int):
         """Get IP addresses for a specific subnet"""
         return self.request("GET", f"subnets/{subnet_id}", op="ip_addresses")
+    
+    # Reserved IP operations
+    def get_reserved_ips(self):
+        """List all reserved IPs"""
+        return self.request("GET", "reservedips")
+    
+    def get_reserved_ip(self, reserved_ip_id: int):
+        """Get a specific reserved IP by ID"""
+        return self.request("GET", f"reservedips/{reserved_ip_id}")
+    
+    def create_reserved_ip(self, data: Dict):
+        """Create a new reserved IP"""
+        return self.request("POST", "reservedips", data=data)
+    
+    def update_reserved_ip(self, reserved_ip_id: int, data: Dict):
+        """Update a reserved IP"""
+        return self.request("PUT", f"reservedips/{reserved_ip_id}", data=data)
+    
+    def delete_reserved_ip(self, reserved_ip_id: int):
+        """Delete a reserved IP"""
+        return self.request("DELETE", f"reservedips/{reserved_ip_id}")

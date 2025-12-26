@@ -8,6 +8,7 @@ from .storage import StorageManager
 from .bios import BIOSManager
 from .boot import BootManager
 from .network import NetworkManager
+from .reservedip import ReservedIPManager
 
 log = logging.getLogger("maas_automation.controller")
 
@@ -22,6 +23,7 @@ class Controller:
         self.bios = BIOSManager(self.client)
         self.boot = BootManager(self.client)
         self.network = NetworkManager(self.client, max_retries=max_retries)
+        self.reservedip = ReservedIPManager(self.client, max_retries=max_retries)
         self.max_retries = max_retries
         
         if max_retries == 0:
@@ -453,54 +455,33 @@ class Controller:
         print(f"Total: {len(snippets)} DHCP snippets\n")
     
     def list_reserved_ips(self):
-        """List all reserved IP addresses by iterating over all subnets"""
-        # Get all subnets first
-        subnets = self.client.list_subnets()
-        
-        if not subnets:
-            print("\nNo subnets found in MAAS\n")
-            return
-        
-        print(f"\nFound {len(subnets)} subnet(s), collecting reserved IPs...")
-        
-        all_reserved = []
-        
-        # Iterate over each subnet and get reserved IPs
-        for subnet in subnets:
-            subnet_id = subnet.get('id')
-            subnet_cidr = subnet.get('cidr', 'unknown')
+        """List all reserved IP addresses using the new reservedips endpoint"""
+        try:
+            reserved_ips = self.reservedip.list()
             
-            try:
-                reserved = self.client.get_subnet_reserved_ips(subnet_id)
-                if reserved:
-                    for ip in reserved:
-                        ip['subnet_cidr'] = subnet_cidr  # Add subnet info
-                        all_reserved.append(ip)
-                    log.debug(f"Subnet {subnet_cidr}: {len(reserved)} reserved IPs")
-            except Exception as e:
-                log.debug(f"Error getting reserved IPs for subnet {subnet_cidr}: {e}")
-                continue
-        
-        if not all_reserved:
-            print("\nNo reserved IP addresses found\n")
-            return
-        
-        print("\n" + "=" * 120)
-        print(f"{'IP ADDRESS':<20} {'MAC ADDRESS':<20} {'HOSTNAME':<25} {'SUBNET':<25} {'OWNER':<20} {'COMMENT':<25}")
-        print("=" * 120)
-        
-        for ip_data in all_reserved:
-            ip_addr = ip_data.get('ip', '-')
-            mac = ip_data.get('mac', '-')
-            hostname = ip_data.get('hostname', '-')
-            subnet_cidr = ip_data.get('subnet_cidr', '-')
-            owner = ip_data.get('user', '-')
-            comment = ip_data.get('comment', '-')
+            if not reserved_ips:
+                print("\nNo reserved IP addresses found\n")
+                return
             
-            print(f"{ip_addr:<20} {mac:<20} {hostname:<25} {subnet_cidr:<25} {owner:<20} {comment:<25}")
-        
-        print("=" * 120)
-        print(f"Total: {len(all_reserved)} reserved IP addresses across {len(subnets)} subnet(s)\n")
+            print("\n" + "=" * 120)
+            print(f"{'ID':<8} {'IP ADDRESS':<20} {'MAC ADDRESS':<20} {'SUBNET':<25} {'COMMENT':<40}")
+            print("=" * 120)
+            
+            for ip_data in reserved_ips:
+                ip_id = str(ip_data.get('id', '-'))
+                ip_addr = ip_data.get('ip', '-')
+                mac = ip_data.get('mac_address', '-')
+                subnet = ip_data.get('subnet', {})
+                subnet_cidr = subnet.get('cidr', '-') if isinstance(subnet, dict) else str(subnet)
+                comment = ip_data.get('comment', '-')
+                
+                print(f"{ip_id:<8} {ip_addr:<20} {mac:<20} {subnet_cidr:<25} {comment:<40}")
+            
+            print("=" * 120)
+            print(f"Total: {len(reserved_ips)} reserved IP addresses\n")
+        except Exception as e:
+            log.error(f"Failed to list reserved IPs: {e}")
+            print(f"\n❌ Failed to list reserved IPs: {e}\n")
     
     def list_static_leases(self):
         """List all static DHCP leases by iterating over all subnets"""
@@ -551,3 +532,94 @@ class Controller:
         
         print("=" * 140)
         print(f"Total: {len(all_leases)} static DHCP leases across {len(subnets)} subnet(s)\n")
+    
+    def get_reserved_ip_details(self, reserved_ip_id: int):
+        """Get and display details of a specific reserved IP"""
+        try:
+            reserved_ip = self.reservedip.get(reserved_ip_id)
+            
+            if not reserved_ip:
+                print(f"\n❌ Reserved IP with ID {reserved_ip_id} not found\n")
+                return
+            
+            print("\n" + "=" * 80)
+            print(f"RESERVED IP DETAILS (ID: {reserved_ip_id})")
+            print("=" * 80)
+            print(f"IP Address:    {reserved_ip.get('ip', '-')}")
+            print(f"MAC Address:   {reserved_ip.get('mac_address', '-')}")
+            
+            subnet = reserved_ip.get('subnet', {})
+            if isinstance(subnet, dict):
+                print(f"Subnet:        {subnet.get('cidr', '-')} (ID: {subnet.get('id', '-')})")
+            else:
+                print(f"Subnet:        {subnet}")
+            
+            print(f"Comment:       {reserved_ip.get('comment', '-')}")
+            print("=" * 80 + "\n")
+        except Exception as e:
+            log.error(f"Failed to get reserved IP {reserved_ip_id}: {e}")
+            print(f"\n❌ Failed to get reserved IP {reserved_ip_id}: {e}\n")
+    
+    def create_reserved_ip_from_config(self, config: Dict):
+        """Create a reserved IP from configuration"""
+        try:
+            reserved_ip = self.reservedip.create(config)
+            
+            print("\n" + "=" * 80)
+            print("✓ RESERVED IP CREATED")
+            print("=" * 80)
+            print(f"ID:            {reserved_ip.get('id')}")
+            print(f"IP Address:    {reserved_ip.get('ip')}")
+            print(f"MAC Address:   {reserved_ip.get('mac_address', '-')}")
+            
+            subnet = reserved_ip.get('subnet', {})
+            if isinstance(subnet, dict):
+                print(f"Subnet:        {subnet.get('cidr', '-')}")
+            else:
+                print(f"Subnet:        {subnet}")
+            
+            print(f"Comment:       {reserved_ip.get('comment', '-')}")
+            print("=" * 80 + "\n")
+            
+            return reserved_ip.get('id')
+        except Exception as e:
+            log.error(f"Failed to create reserved IP: {e}")
+            print(f"\n❌ Failed to create reserved IP: {e}\n")
+            raise
+    
+    def update_reserved_ip_from_config(self, reserved_ip_id: int, config: Dict):
+        """Update a reserved IP from configuration"""
+        try:
+            reserved_ip = self.reservedip.update(reserved_ip_id, config)
+            
+            print("\n" + "=" * 80)
+            print(f"✓ RESERVED IP UPDATED (ID: {reserved_ip_id})")
+            print("=" * 80)
+            print(f"IP Address:    {reserved_ip.get('ip')}")
+            print(f"MAC Address:   {reserved_ip.get('mac_address', '-')}")
+            
+            subnet = reserved_ip.get('subnet', {})
+            if isinstance(subnet, dict):
+                print(f"Subnet:        {subnet.get('cidr', '-')}")
+            else:
+                print(f"Subnet:        {subnet}")
+            
+            print(f"Comment:       {reserved_ip.get('comment', '-')}")
+            print("=" * 80 + "\n")
+        except Exception as e:
+            log.error(f"Failed to update reserved IP {reserved_ip_id}: {e}")
+            print(f"\n❌ Failed to update reserved IP {reserved_ip_id}: {e}\n")
+            raise
+    
+    def delete_reserved_ip_by_id(self, reserved_ip_id: int):
+        """Delete a reserved IP by ID"""
+        try:
+            self.reservedip.delete(reserved_ip_id)
+            
+            print("\n" + "=" * 80)
+            print(f"✓ RESERVED IP DELETED (ID: {reserved_ip_id})")
+            print("=" * 80 + "\n")
+        except Exception as e:
+            log.error(f"Failed to delete reserved IP {reserved_ip_id}: {e}")
+            print(f"\n❌ Failed to delete reserved IP {reserved_ip_id}: {e}\n")
+            raise

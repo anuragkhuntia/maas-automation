@@ -33,7 +33,11 @@ VALID_ACTIONS = {
     'show_network',
     'list_dhcp_snippets',
     'list_reserved_ips',
-    'list_static_leases'
+    'list_static_leases',
+    'get_reserved_ip',
+    'create_reserved_ip',
+    'update_reserved_ip',
+    'delete_reserved_ip'
 }
 
 
@@ -62,6 +66,11 @@ def print_available_actions():
     print("  • list_dhcp_snippets - List DHCP snippets with count, name, and last updated")
     print("  • list_reserved_ips  - List all reserved IP addresses")
     print("  • list_static_leases - List all static DHCP leases")
+    print("\nReserved IP Management:")
+    print("  • get_reserved_ip    - Get details of a specific reserved IP")
+    print("  • create_reserved_ip - Create a new reserved IP")
+    print("  • update_reserved_ip - Update an existing reserved IP")
+    print("  • delete_reserved_ip - Delete a reserved IP")
     print("\n" + "=" * 60 + "\n")
 
 
@@ -208,6 +217,50 @@ def main():
         # Special action: list static DHCP leases
         if 'list_static_leases' in cfg.get('actions', []):
             controller.list_static_leases()
+            import os
+            os._exit(0)
+        
+        # Special action: get reserved IP details
+        if 'get_reserved_ip' in cfg.get('actions', []):
+            reserved_ip_id = cfg.get('reserved_ip_id')
+            if not reserved_ip_id:
+                log.error("Missing 'reserved_ip_id' in configuration for get_reserved_ip action")
+                sys.exit(1)
+            controller.get_reserved_ip_details(reserved_ip_id)
+            import os
+            os._exit(0)
+        
+        # Special action: create reserved IP
+        if 'create_reserved_ip' in cfg.get('actions', []):
+            reserved_ip_config = cfg.get('reserved_ip', {})
+            if not reserved_ip_config:
+                log.error("Missing 'reserved_ip' configuration for create_reserved_ip action")
+                sys.exit(1)
+            controller.create_reserved_ip_from_config(reserved_ip_config)
+            import os
+            os._exit(0)
+        
+        # Special action: update reserved IP
+        if 'update_reserved_ip' in cfg.get('actions', []):
+            reserved_ip_id = cfg.get('reserved_ip_id')
+            reserved_ip_config = cfg.get('reserved_ip', {})
+            if not reserved_ip_id:
+                log.error("Missing 'reserved_ip_id' in configuration for update_reserved_ip action")
+                sys.exit(1)
+            if not reserved_ip_config:
+                log.error("Missing 'reserved_ip' configuration for update_reserved_ip action")
+                sys.exit(1)
+            controller.update_reserved_ip_from_config(reserved_ip_id, reserved_ip_config)
+            import os
+            os._exit(0)
+        
+        # Special action: delete reserved IP
+        if 'delete_reserved_ip' in cfg.get('actions', []):
+            reserved_ip_id = cfg.get('reserved_ip_id')
+            if not reserved_ip_id:
+                log.error("Missing 'reserved_ip_id' in configuration for delete_reserved_ip action")
+                sys.exit(1)
+            controller.delete_reserved_ip_by_id(reserved_ip_id)
             import os
             os._exit(0)
         
