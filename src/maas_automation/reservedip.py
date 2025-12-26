@@ -69,7 +69,7 @@ class ReservedIPManager:
         
         log.info(f"Creating reserved IP: {ip_address}")
         
-        payload = {"ip": ip_address, "mac": mac_address}
+        payload = {"ip": ip_address, "mac_address": mac_address}
         
         # Handle subnet - accept either ID (int) or name (string)
         if "subnet" in config:
