@@ -100,16 +100,18 @@ class ReservedIPManager:
         log.debug(f"Reserved IP payload: {payload}")
         
         try:
-            reserved_ip = retry(
-                lambda: self.client.create_reserved_ip(payload),
-                retries=self.max_retries,
-                delay=2.0
-            )
+            reserved_ip = self.client.create_reserved_ip(payload)
             log.info(f"✓ Created reserved IP: {ip_address} (ID: {reserved_ip.get('id')})")
             return reserved_ip
         except Exception as e:
-            log.error(f"Failed to create reserved IP '{ip_address}': {e}")
-            raise
+            error_msg = str(e)
+            # Check if IP already exists
+            if "already" in error_msg.lower() or "exists" in error_msg.lower() or "duplicate" in error_msg.lower():
+                log.error(f"Reserved IP {ip_address} already exists in MAAS")
+                raise ValueError(f"Reserved IP {ip_address} already exists")
+            else:
+                log.error(f"Failed to create reserved IP '{ip_address}': {e}")
+                raise
 
     def update(self, reserved_ip_id: int, config: Dict) -> Dict:
         """

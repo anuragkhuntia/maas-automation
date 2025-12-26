@@ -622,6 +622,16 @@ class Controller:
                 print("=" * 80 + "\n")
                 
                 created_ids.append(reserved_ip.get('id'))
+            except ValueError as e:
+                # Handle "already exists" errors without retrying
+                error_msg = str(e)
+                if "already exists" in error_msg:
+                    log.warning(f"Skipping reserved IP {idx}: {error_msg}")
+                    print(f"\n⚠️  Reserved IP {idx} already exists - skipping\n")
+                else:
+                    log.error(f"Failed to create reserved IP {idx}: {e}")
+                    print(f"\n❌ Failed to create reserved IP {idx}: {e}\n")
+                continue
             except Exception as e:
                 log.error(f"Failed to create reserved IP {idx}: {e}")
                 print(f"\n❌ Failed to create reserved IP {idx}: {e}\n")
