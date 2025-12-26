@@ -168,5 +168,5 @@ class MaasClient:
         return self.request("GET", "subnets")
     
     def get_subnet_reserved_ips(self, subnet_id: int):
-        """Get reserved IPs for a specific subnet"""
-        return self.request("GET", f"subnets/{subnet_id}", op="reserved_ips")
+        """Get IP addresses for a specific subnet"""
+        return self.request("GET", f"subnets/{subnet_id}", op="ip_addresses")
