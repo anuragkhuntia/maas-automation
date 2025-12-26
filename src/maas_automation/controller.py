@@ -453,73 +453,101 @@ class Controller:
         print(f"Total: {len(snippets)} DHCP snippets\n")
     
     def list_reserved_ips(self):
-        """List all reserved IP addresses"""
-        ips = self.client.list_reserved_ips()
+        """List all reserved IP addresses by iterating over all subnets"""
+        # Get all subnets first
+        subnets = self.client.list_subnets()
         
-        # Filter for reserved IPs only
-        reserved = [ip for ip in ips if ip.get('alloc_type') in [4, 5, 6]]  # 4=USER_RESERVED, 5=DHCP, 6=DISCOVERED
+        if not subnets:
+            print("\nNo subnets found in MAAS\n")
+            return
+        
+        print(f"\nFound {len(subnets)} subnet(s), collecting reserved IPs...")
+        
+        all_reserved = []
+        
+        # Iterate over each subnet and get reserved IPs
+        for subnet in subnets:
+            subnet_id = subnet.get('id')
+            subnet_cidr = subnet.get('cidr', 'unknown')
+            
+            try:
+                reserved = self.client.get_subnet_reserved_ips(subnet_id)
+                if reserved:
+                    for ip in reserved:
+                        ip['subnet_cidr'] = subnet_cidr  # Add subnet info
+                        all_reserved.append(ip)
+                    log.debug(f"Subnet {subnet_cidr}: {len(reserved)} reserved IPs")
+            except Exception as e:
+                log.debug(f"Error getting reserved IPs for subnet {subnet_cidr}: {e}")
+                continue
+        
+        if not all_reserved:
+            print("\nNo reserved IP addresses found\n")
+            return
         
         print("\n" + "=" * 120)
-        print(f"{'IP ADDRESS':<20} {'TYPE':<20} {'OWNER':<20} {'SUBNET':<25} {'CREATED':<30}")
+        print(f"{'IP ADDRESS':<20} {'MAC ADDRESS':<20} {'HOSTNAME':<25} {'SUBNET':<25} {'OWNER':<20} {'COMMENT':<25}")
         print("=" * 120)
         
-        alloc_types = {
-            0: 'AUTOMATIC',
-            1: 'STICKY',
-            4: 'USER_RESERVED',
-            5: 'DHCP',
-            6: 'DISCOVERED'
-        }
-        
-        for ip_data in reserved:
+        for ip_data in all_reserved:
             ip_addr = ip_data.get('ip', '-')
-            alloc_type = alloc_types.get(ip_data.get('alloc_type', 0), 'UNKNOWN')
-            owner = ip_data.get('owner', {}).get('username', '-') if ip_data.get('owner') else '-'
-            subnet = ip_data.get('subnet', {}).get('cidr', '-') if ip_data.get('subnet') else '-'
-            created = ip_data.get('created', '-')
+            mac = ip_data.get('mac', '-')
+            hostname = ip_data.get('hostname', '-')
+            subnet_cidr = ip_data.get('subnet_cidr', '-')
+            owner = ip_data.get('user', '-')
+            comment = ip_data.get('comment', '-')
             
-            print(f"{ip_addr:<20} {alloc_type:<20} {owner:<20} {subnet:<25} {created:<30}")
+            print(f"{ip_addr:<20} {mac:<20} {hostname:<25} {subnet_cidr:<25} {owner:<20} {comment:<25}")
         
         print("=" * 120)
-        print(f"Total: {len(reserved)} reserved IP addresses (filtered from {len(ips)} total)\n")
+        print(f"Total: {len(all_reserved)} reserved IP addresses across {len(subnets)} subnet(s)\n")
     
     def list_static_leases(self):
-        """List all static DHCP leases (user-reserved and DHCP allocated IPs)"""
-        ips = self.client.list_static_leases()
+        """List all static DHCP leases by iterating over all subnets"""
+        # Get all subnets first
+        subnets = self.client.list_subnets()
         
-        # Filter for static leases: USER_RESERVED (4) and DHCP (5)
-        static = [ip for ip in ips if ip.get('alloc_type') in [4, 5]]
+        if not subnets:
+            print("\nNo subnets found in MAAS\n")
+            return
+        
+        print(f"\nFound {len(subnets)} subnet(s), collecting reserved IPs...")
+        
+        all_leases = []
+        
+        # Iterate over each subnet and get reserved IPs
+        for subnet in subnets:
+            subnet_id = subnet.get('id')
+            subnet_cidr = subnet.get('cidr', 'unknown')
+            
+            try:
+                reserved = self.client.get_subnet_reserved_ips(subnet_id)
+                if reserved:
+                    for ip in reserved:
+                        ip['subnet_cidr'] = subnet_cidr  # Add subnet info
+                        all_leases.append(ip)
+                    log.debug(f"Subnet {subnet_cidr}: {len(reserved)} reserved IPs")
+            except Exception as e:
+                log.debug(f"Error getting reserved IPs for subnet {subnet_cidr}: {e}")
+                continue
+        
+        if not all_leases:
+            print("\nNo static DHCP leases found\n")
+            return
         
         print("\n" + "=" * 140)
-        print(f"{'IP ADDRESS':<20} {'MAC ADDRESS':<20} {'HOSTNAME':<25} {'SUBNET':<25} {'OWNER':<20} {'CREATED':<25}")
+        print(f"{'IP ADDRESS':<20} {'MAC ADDRESS':<20} {'HOSTNAME':<25} {'SUBNET':<25} {'OWNER':<20} {'COMMENT':<25}")
         print("=" * 140)
         
-        for ip_data in static:
-            ip_addr = ip_data.get('ip', '-')
+        for lease in all_leases:
+            ip_addr = lease.get('ip', '-')
+            mac = lease.get('mac', '-')
+            hostname = lease.get('hostname', '-')
+            subnet_cidr = lease.get('subnet_cidr', '-')
+            owner = lease.get('user', '-')
+            comment = lease.get('comment', '-')
             
-            # Get MAC address from interface
-            mac = '-'
-            interface = ip_data.get('interface', {})
-            if interface:
-                mac = interface.get('mac_address', '-')
-            
-            # Get hostname from interface/machine
-            hostname = '-'
-            if interface:
-                machine = interface.get('machine', {})
-                if machine:
-                    hostname = machine.get('hostname', '-')
-            
-            # Get subnet
-            subnet = ip_data.get('subnet', {}).get('cidr', '-') if ip_data.get('subnet') else '-'
-            
-            # Get owner
-            owner = ip_data.get('owner', {}).get('username', '-') if ip_data.get('owner') else '-'
-            
-            # Get created time
-            created = ip_data.get('created', '-')
-            
-            print(f"{ip_addr:<20} {mac:<20} {hostname:<25} {subnet:<25} {owner:<20} {created:<25}")
+            print(f"{ip_addr:<20} {mac:<20} {hostname:<25} {subnet_cidr:<25} {owner:<20} {comment:<25}")
         
         print("=" * 140)
-        print(f"Total: {len(static)} static DHCP leases (filtered from {len(ips)} total IP addresses)\n")
+        print(f"Total: {len(all_leases)} static DHCP leases across {len(subnets)} subnet(s)\n")
