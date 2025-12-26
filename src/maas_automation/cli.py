@@ -31,7 +31,8 @@ VALID_ACTIONS = {
     'delete',
     'list',
     'show_network',
-    'list_dhcp_snippets'
+    'list_dhcp_snippets',
+    'list_reserved_ips'
 }
 
 
@@ -58,6 +59,7 @@ def print_available_actions():
     print("  • list               - List all machines")
     print("  • show_network       - Show detailed network info")
     print("  • list_dhcp_snippets - List DHCP snippets with count, name, and last updated")
+    print("  • list_reserved_ips  - List all reserved IP addresses")
     print("\n" + "=" * 60 + "\n")
 
 
@@ -192,6 +194,12 @@ def main():
         # Special action: list DHCP snippets
         if 'list_dhcp_snippets' in cfg.get('actions', []):
             controller.list_dhcp_snippets()
+            import os
+            os._exit(0)
+        
+        # Special action: list reserved IPs
+        if 'list_reserved_ips' in cfg.get('actions', []):
+            controller.list_reserved_ips()
             import os
             os._exit(0)
         

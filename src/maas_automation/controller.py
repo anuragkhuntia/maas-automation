@@ -451,3 +451,34 @@ class Controller:
         
         print("=" * 100)
         print(f"Total: {len(snippets)} DHCP snippets\n")
+    
+    def list_reserved_ips(self):
+        """List all reserved IP addresses"""
+        ips = self.client.list_reserved_ips()
+        
+        # Filter for reserved IPs only
+        reserved = [ip for ip in ips if ip.get('alloc_type') in [4, 5, 6]]  # 4=USER_RESERVED, 5=DHCP, 6=DISCOVERED
+        
+        print("\n" + "=" * 120)
+        print(f"{'IP ADDRESS':<20} {'TYPE':<20} {'OWNER':<20} {'SUBNET':<25} {'CREATED':<30}")
+        print("=" * 120)
+        
+        alloc_types = {
+            0: 'AUTOMATIC',
+            1: 'STICKY',
+            4: 'USER_RESERVED',
+            5: 'DHCP',
+            6: 'DISCOVERED'
+        }
+        
+        for ip_data in reserved:
+            ip_addr = ip_data.get('ip', '-')
+            alloc_type = alloc_types.get(ip_data.get('alloc_type', 0), 'UNKNOWN')
+            owner = ip_data.get('owner', {}).get('username', '-') if ip_data.get('owner') else '-'
+            subnet = ip_data.get('subnet', {}).get('cidr', '-') if ip_data.get('subnet') else '-'
+            created = ip_data.get('created', '-')
+            
+            print(f"{ip_addr:<20} {alloc_type:<20} {owner:<20} {subnet:<25} {created:<30}")
+        
+        print("=" * 120)
+        print(f"Total: {len(reserved)} reserved IP addresses (filtered from {len(ips)} total)\n")
