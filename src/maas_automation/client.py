@@ -153,4 +153,4 @@ class MaasClient:
     
     def list_dhcp_snippets(self):
         """List all DHCP snippets"""
-        return self.request("GET", "dhcpsnippets")
+        return self.request("GET", "dhcp-snippets")
