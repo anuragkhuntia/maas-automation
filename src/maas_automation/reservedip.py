@@ -67,7 +67,8 @@ class ReservedIPManager:
         
         payload = {"ip": ip_address}
         
-        if "mac" in config:
+        # Only add MAC if it's provided and not empty
+        if config.get("mac"):
             payload["mac"] = config["mac"]
         
         # Handle subnet - accept either ID (int) or name (string)
@@ -92,7 +93,8 @@ class ReservedIPManager:
                 # Assume it's an ID
                 payload["subnet"] = subnet_value
         
-        if "comment" in config:
+        # Only add comment if it's provided and not empty
+        if config.get("comment"):
             payload["comment"] = config["comment"]
         
         log.debug(f"Reserved IP payload: {payload}")
