@@ -150,3 +150,7 @@ class MaasClient:
     def set_storage_layout(self, system_id: str, layout_type: str):
         return self.request("POST", f"machines/{system_id}", 
                           data={"op": "set_storage_layout", "storage_layout": layout_type})
+    
+    def list_dhcp_snippets(self):
+        """List all DHCP snippets"""
+        return self.request("GET", "dhcpsnippets")

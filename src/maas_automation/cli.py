@@ -30,7 +30,8 @@ VALID_ACTIONS = {
     'release',
     'delete',
     'list',
-    'show_network'
+    'show_network',
+    'list_dhcp_snippets'
 }
 
 
@@ -56,6 +57,7 @@ def print_available_actions():
     print("\nInformation:")
     print("  • list               - List all machines")
     print("  • show_network       - Show detailed network info")
+    print("  • list_dhcp_snippets - List DHCP snippets with count, name, and last updated")
     print("\n" + "=" * 60 + "\n")
 
 
@@ -184,6 +186,12 @@ def main():
         # Special action: show network info
         if 'show_network' in cfg.get('actions', []):
             controller.show_network_info(cfg)
+            import os
+            os._exit(0)
+        
+        # Special action: list DHCP snippets
+        if 'list_dhcp_snippets' in cfg.get('actions', []):
+            controller.list_dhcp_snippets()
             import os
             os._exit(0)
         

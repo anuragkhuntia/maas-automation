@@ -432,3 +432,22 @@ class Controller:
                 continue
         
         print("\n" + "=" * 130 + "\n")
+    
+    def list_dhcp_snippets(self):
+        """List all DHCP snippets with count, name, and last updated"""
+        snippets = self.client.list_dhcp_snippets()
+        
+        print("\n" + "=" * 100)
+        print(f"{'ID':<8} {'NAME':<40} {'ENABLED':<10} {'LAST UPDATED':<30}")
+        print("=" * 100)
+        
+        for snippet in snippets:
+            snippet_id = snippet.get('id', '-')
+            name = snippet.get('name', '-')
+            enabled = '✓ Yes' if snippet.get('enabled', False) else '✗ No'
+            updated = snippet.get('updated', '-')
+            
+            print(f"{str(snippet_id):<8} {name:<40} {enabled:<10} {updated:<30}")
+        
+        print("=" * 100)
+        print(f"Total: {len(snippets)} DHCP snippets\n")
