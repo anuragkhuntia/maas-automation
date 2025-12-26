@@ -30,7 +30,7 @@ VALID_ACTIONS = {
     'release',
     'delete',
     'list',
-    'show_network',
+    'list_machine_network',
     'list_dhcp_snippets',
     'list_subnets',
     'list_reserved_ips',
@@ -63,7 +63,7 @@ def print_available_actions():
     print("  • set_network_bond   - Configure network bond from VLAN interfaces")
     print("\nInformation:")
     print("  • list               - List all machines")
-    print("  • show_network       - Show detailed network info")
+    print("  • list_machine_network - Show detailed machine network info")
     print("  • list_dhcp_snippets - List DHCP snippets with count, name, and last updated")
     print("  • list_subnets       - List all subnets")
     print("  • list_reserved_ips  - List all reserved IP addresses")
@@ -198,8 +198,8 @@ def main():
             import os
             os._exit(0)
         
-        # Special action: show network info
-        if 'show_network' in cfg.get('actions', []):
+        # Special action: show machine network info
+        if 'list_machine_network' in cfg.get('actions', []):
             controller.show_network_info(cfg)
             import os
             os._exit(0)

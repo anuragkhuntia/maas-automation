@@ -469,12 +469,12 @@ class Controller:
             
             for subnet in subnets:
                 subnet_id = str(subnet.get('id', '-'))
-                name = subnet.get('name', '-')
-                cidr = subnet.get('cidr', '-')
+                name = subnet.get('name') or '-'
+                cidr = subnet.get('cidr') or '-'
                 vlan = subnet.get('vlan', {})
-                vlan_name = vlan.get('name', '-') if isinstance(vlan, dict) else str(vlan)
-                gateway_ip = subnet.get('gateway_ip', '-')
-                dns_servers = ', '.join(subnet.get('dns_servers', [])) or '-'
+                vlan_name = vlan.get('name', '-') if isinstance(vlan, dict) else (str(vlan) if vlan else '-')
+                gateway_ip = subnet.get('gateway_ip') or '-'
+                dns_servers = ', '.join(subnet.get('dns_servers', [])) if subnet.get('dns_servers') else '-'
                 managed = 'Yes' if subnet.get('managed', False) else 'No'
                 
                 print(f"{subnet_id:<6} {name:<25} {cidr:<20} {vlan_name:<15} {gateway_ip:<20} {dns_servers:<20} {managed:<10}")
