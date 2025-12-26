@@ -32,7 +32,8 @@ VALID_ACTIONS = {
     'list',
     'show_network',
     'list_dhcp_snippets',
-    'list_reserved_ips'
+    'list_reserved_ips',
+    'list_static_leases'
 }
 
 
@@ -60,6 +61,7 @@ def print_available_actions():
     print("  • show_network       - Show detailed network info")
     print("  • list_dhcp_snippets - List DHCP snippets with count, name, and last updated")
     print("  • list_reserved_ips  - List all reserved IP addresses")
+    print("  • list_static_leases - List all static DHCP leases")
     print("\n" + "=" * 60 + "\n")
 
 
@@ -200,6 +202,12 @@ def main():
         # Special action: list reserved IPs
         if 'list_reserved_ips' in cfg.get('actions', []):
             controller.list_reserved_ips()
+            import os
+            os._exit(0)
+        
+        # Special action: list static DHCP leases
+        if 'list_static_leases' in cfg.get('actions', []):
+            controller.list_static_leases()
             import os
             os._exit(0)
         

@@ -482,3 +482,44 @@ class Controller:
         
         print("=" * 120)
         print(f"Total: {len(reserved)} reserved IP addresses (filtered from {len(ips)} total)\n")
+    
+    def list_static_leases(self):
+        """List all static DHCP leases (user-reserved and DHCP allocated IPs)"""
+        ips = self.client.list_static_leases()
+        
+        # Filter for static leases: USER_RESERVED (4) and DHCP (5)
+        static = [ip for ip in ips if ip.get('alloc_type') in [4, 5]]
+        
+        print("\n" + "=" * 140)
+        print(f"{'IP ADDRESS':<20} {'MAC ADDRESS':<20} {'HOSTNAME':<25} {'SUBNET':<25} {'OWNER':<20} {'CREATED':<25}")
+        print("=" * 140)
+        
+        for ip_data in static:
+            ip_addr = ip_data.get('ip', '-')
+            
+            # Get MAC address from interface
+            mac = '-'
+            interface = ip_data.get('interface', {})
+            if interface:
+                mac = interface.get('mac_address', '-')
+            
+            # Get hostname from interface/machine
+            hostname = '-'
+            if interface:
+                machine = interface.get('machine', {})
+                if machine:
+                    hostname = machine.get('hostname', '-')
+            
+            # Get subnet
+            subnet = ip_data.get('subnet', {}).get('cidr', '-') if ip_data.get('subnet') else '-'
+            
+            # Get owner
+            owner = ip_data.get('owner', {}).get('username', '-') if ip_data.get('owner') else '-'
+            
+            # Get created time
+            created = ip_data.get('created', '-')
+            
+            print(f"{ip_addr:<20} {mac:<20} {hostname:<25} {subnet:<25} {owner:<20} {created:<25}")
+        
+        print("=" * 140)
+        print(f"Total: {len(static)} static DHCP leases (filtered from {len(ips)} total IP addresses)\n")

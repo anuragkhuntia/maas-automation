@@ -158,3 +158,7 @@ class MaasClient:
     def list_reserved_ips(self):
         """List all reserved IP addresses"""
         return self.request("GET", "ipaddresses")
+    
+    def list_static_leases(self):
+        """List all static IP addresses (static DHCP leases)"""
+        return self.request("GET", "ipaddresses")
