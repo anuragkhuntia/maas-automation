@@ -305,46 +305,62 @@ class NetworkManager:
 
     def configure_bond_by_vlan(self, system_id: str, bond_config: Dict) -> Dict:
         """
-        Configure a network bond by finding interfaces with a specific VLAN ID.
+        Configure a network bond by finding interfaces with a specific VLAN ID or multiple VLANs.
         
         This method:
-        1. Takes a VLAN ID from the bond configuration
-        2. Finds all interfaces where this VLAN is visible
-        3. Links both interfaces to the specified subnet (if provided)
-        4. Creates a bond between those interfaces
+        1. Takes VLAN ID(s) from the bond configuration (single int or list)
+        2. Finds all interfaces where the VLAN(s) is/are visible
+        3. Creates a bond between those interfaces
+        4. If multiple VLANs specified, creates VLAN interfaces for each VLAN
+        5. Optionally links to subnet if provided
         
         Args:
             system_id: Machine system ID
             bond_config: Bond configuration with keys:
                 - name: Bond name (e.g., "bond0")
-                - vlan_id: VLAN ID to search for in interfaces
+                - vlan_id: VLAN ID (int) or list of VLAN IDs [int, int, ...]
                 - mode: Bond mode (e.g., "802.3ad", "active-backup", "balance-rr")
                 - mtu: MTU size (optional, default: 1500)
                 - subnet: Subnet name to link both interfaces to (optional)
                 - ip_mode: "static", "dynamic", or "automatic" (optional, default: "automatic")
                 - ip_address: Static IP if ip_mode is "static" (optional)
         
-        Example config:
+        Example config (single VLAN):
         {
             "name": "bond0",
             "vlan_id": 100,
-            "mode": "802.3ad",
-            "mtu": 9000,
-            "subnet": "my-subnet-name",
-            "ip_mode": "static",
-            "ip_address": "10.0.0.100"
+            "mode": "802.3ad"
+        }
+        
+        Example config (multiple VLANs):
+        {
+            "name": "prov_bond",
+            "vlan_id": [1234, 1235],
+            "mode": "active-backup"
         }
         
         Returns:
-            Created bond interface details
+            Created bond interface details (or last VLAN interface if multiple VLANs)
         """
         bond_name = bond_config.get("name")
-        vlan_id = bond_config.get("vlan_id")
+        vlan_id_config = bond_config.get("vlan_id")
         
         if not bond_name:
             raise ValueError("Bond config must have 'name'")
-        if vlan_id is None:
+        if vlan_id_config is None:
             raise ValueError("Bond config must have 'vlan_id'")
+        
+        # Support both single VLAN and multiple VLANs
+        if isinstance(vlan_id_config, list):
+            vlan_ids = vlan_id_config
+            primary_vlan_id = vlan_ids[0]
+            log.info(f"Multiple VLANs requested: {vlan_ids}, using {primary_vlan_id} to find interfaces")
+        else:
+            vlan_ids = [vlan_id_config]
+            primary_vlan_id = vlan_id_config
+            log.info(f"Single VLAN requested: {primary_vlan_id}")
+        
+        vlan_id = primary_vlan_id
         
         log.info(f"Looking for interfaces with VLAN ID {vlan_id} on {system_id}")
         
@@ -540,47 +556,72 @@ class NetworkManager:
                 log.info(f"⚠ Subnet '{subnet_name}' specified but no ip_mode provided - skipping subnet configuration")
                 log.info(f"  To configure subnet, add 'ip_mode' field with value: 'static', 'dynamic', or 'automatic'")
             
-            # Tag the bond with the VLAN ID
-            log.info(f"\nTagging bond '{bond_name}' with VLAN ID {vlan_id}...")
-            try:
-                tagged_bond = self.create_vlan_interface(system_id, bond['id'], vlan_id, bond_name)
-                log.info(f"✓ Successfully tagged bond with VLAN {vlan_id}")
-                log.info(f"  - VLAN Interface ID: {tagged_bond.get('id')}")
-                log.info(f"  - VLAN Interface Name: {tagged_bond.get('name')}")
-                
-                # If subnet was configured, link the VLAN interface to subnet
-                if subnet_name and ip_mode and target_subnet:
-                    log.info(f"\nLinking VLAN-tagged interface to subnet '{subnet_name}'...")
-                    try:
-                        link_payload = {
-                            "mode": ip_mode.upper(),
-                            "subnet": target_subnet["id"]
-                        }
-                        
-                        if ip_mode == "static" and ip_address:
-                            link_payload["ip_address"] = ip_address
-                        
-                        retry(
-                            lambda: self.client.request(
-                                "POST",
-                                f"nodes/{system_id}/interfaces/{tagged_bond['id']}",
-                                op="link_subnet",
-                                data=link_payload
-                            ),
-                            retries=self.max_retries,
-                            delay=2.0
-                        )
-                        log.info(f"✓ Linked VLAN interface to subnet '{subnet_name}'")
-                        log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
-                        log.info(f"  - IP Mode: {ip_mode}")
-                        if ip_mode == "static" and ip_address:
-                            log.info(f"  - Static IP: {ip_address}")
-                        
-                    except Exception as subnet_error:
-                        log.error(f"✗ Failed to link subnet to VLAN interface: {subnet_error}")
-                        log.warning(f"VLAN-tagged bond created but subnet linking failed")
-                
-                return tagged_bond
+            # Tag the bond with VLAN ID(s)
+            # If multiple VLANs, create VLAN interface for each
+            created_vlan_interfaces = []
+            last_vlan_interface = None
+            
+            for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
+                log.info(f"\nTagging bond '{bond_name}' with VLAN ID {vlan_tag} ({vlan_idx}/{len(vlan_ids)})...")
+                try:
+                    tagged_bond = self.create_vlan_interface(system_id, bond['id'], vlan_tag, bond_name)
+                    log.info(f"✓ Successfully tagged bond with VLAN {vlan_tag}")
+                    log.info(f"  - VLAN Interface ID: {tagged_bond.get('id')}")
+                    log.info(f"  - VLAN Interface Name: {tagged_bond.get('name')}")
+                    
+                    created_vlan_interfaces.append(tagged_bond)
+                    last_vlan_interface = tagged_bond
+                    
+                    # Only link subnet to primary VLAN if subnet is specified and this is the first VLAN
+                    if vlan_idx == 1 and subnet_name and ip_mode and target_subnet:
+                        log.info(f"\nLinking primary VLAN interface to subnet '{subnet_name}'...")
+                        try:
+                            link_payload = {
+                                "mode": ip_mode.upper(),
+                                "subnet": target_subnet["id"]
+                            }
+                            
+                            if ip_mode == "static" and ip_address:
+                                link_payload["ip_address"] = ip_address
+                            
+                            retry(
+                                lambda: self.client.request(
+                                    "POST",
+                                    f"nodes/{system_id}/interfaces/{tagged_bond['id']}",
+                                    op="link_subnet",
+                                    data=link_payload
+                                ),
+                                retries=self.max_retries,
+                                delay=2.0
+                            )
+                            log.info(f"✓ Linked VLAN interface to subnet '{subnet_name}'")
+                            log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
+                            log.info(f"  - IP Mode: {ip_mode}")
+                            if ip_mode == "static" and ip_address:
+                                log.info(f"  - Static IP: {ip_address}")
+                            
+                        except Exception as subnet_error:
+                            log.error(f"✗ Failed to link subnet to VLAN interface: {subnet_error}")
+                            log.warning(f"VLAN-tagged bond created but subnet linking failed")
+                    
+                except Exception as vlan_error:
+                    log.error(f"✗ Failed to tag bond with VLAN {vlan_tag}: {vlan_error}")
+                    if vlan_idx == 1:
+                        # If first VLAN fails, this is critical
+                        raise
+                    else:
+                        # For subsequent VLANs, log but continue
+                        log.warning(f"Continuing with remaining VLANs...")
+            
+            # Summary
+            if len(created_vlan_interfaces) > 0:
+                log.info(f"\n✓ Created {len(created_vlan_interfaces)} VLAN interface(s) on bond '{bond_name}':")
+                for vlan_iface in created_vlan_interfaces:
+                    log.info(f"  - {vlan_iface.get('name')} (VLAN {vlan_iface.get('vlan', {}).get('vid', 'N/A')})")
+                return last_vlan_interface
+            else:
+                # No VLAN interfaces created, return the bond
+                return bond
                 
             except Exception as vlan_error:
                 log.error(f"✗ Failed to tag bond with VLAN: {vlan_error}")
@@ -631,6 +672,260 @@ class NetworkManager:
             log.error(f"  Payload: {payload}")
             log.error("=" * 60)
             raise
+
+    def update_interface(self, system_id: str, interface_config: Dict) -> Dict:
+        """
+        Update an interface using the MAAS PUT API.
+        
+        This method supports updating interface properties including VLAN configuration,
+        bonding parameters, bridge settings, and physical interface attributes.
+        
+        Args:
+            system_id: Machine system ID
+            interface_config: Interface configuration with keys:
+                - name: Interface name to update (e.g., "bond0", "eth0") - required
+                - interface_id: Interface ID (if name not provided) - optional
+                - vlan: VLAN ID to connect interface to - optional
+                - subnet: Subnet name or CIDR to link to - optional
+                - ip_mode: "static", "dhcp", or "automatic" - optional (required with subnet)
+                - ip_address: Static IP address - optional (for static mode)
+                - mac_address: MAC address (can be updated for deployed machines) - optional
+                - name_update: New name for the interface - optional
+                - mtu: Maximum transmission unit - optional
+                - tags: Comma-separated tags - optional
+                - accept_ra: Accept router advertisements (IPv6 only) - optional
+                - link_connected: Whether interface is physically connected - optional
+                - interface_speed: Speed of interface in Mbit/s - optional
+                - link_speed: Speed of link in Mbit/s - optional
+                
+                Bond-specific parameters:
+                - bond_mode: Bond mode (e.g., "802.3ad", "active-backup") - optional
+                - bond_miimon: Link monitoring frequency in ms - optional
+                - bond_downdelay: Time to wait before disabling slave (ms) - optional
+                - bond_updelay: Time to wait before enabling slave (ms) - optional
+                - bond_lacp_rate: "fast" or "slow" - optional
+                - bond_xmit_hash_policy: Hash policy for slave selection - optional
+                
+                Bridge-specific parameters:
+                - bridge_type: "standard" or "ovs" - optional
+                - bridge_stp: Enable/disable spanning tree protocol - optional
+                - bridge_fd: Bridge forward delay in seconds - optional
+        
+        Returns:
+            Updated interface details
+        
+        Example config for VLAN configuration after bond creation:
+        {
+            "name": "bond0",
+            "vlan": 1551,
+            "subnet": "UPI_App_Prov",
+            "ip_mode": "static",
+            "ip_address": "10.83.96.25"
+        }
+        """
+        interface_name = interface_config.get("name")
+        interface_id = interface_config.get("interface_id")
+        
+        if not interface_name and not interface_id:
+            raise ValueError("Interface config must have 'name' or 'interface_id'")
+        
+        # Find interface by name if ID not provided
+        if not interface_id:
+            iface = self.find_interface_by_name(system_id, interface_name)
+            if not iface:
+                raise ValueError(f"Interface '{interface_name}' not found on machine {system_id}")
+            interface_id = iface["id"]
+            log.info(f"Found interface '{interface_name}' with ID {interface_id}")
+        else:
+            log.info(f"Using provided interface ID {interface_id}")
+        
+        log.info(f"Updating interface ID {interface_id} on system {system_id}")
+        
+        # Build update payload
+        update_data = []
+        
+        # Basic interface parameters
+        if "name_update" in interface_config:
+            update_data.append(("name", interface_config["name_update"]))
+            log.debug(f"  - Updating name to: {interface_config['name_update']}")
+        
+        if "mac_address" in interface_config:
+            update_data.append(("mac_address", interface_config["mac_address"]))
+            log.debug(f"  - Updating MAC address to: {interface_config['mac_address']}")
+        
+        if "mtu" in interface_config:
+            update_data.append(("mtu", str(interface_config["mtu"])))
+            log.debug(f"  - Setting MTU to: {interface_config['mtu']}")
+        
+        if "tags" in interface_config:
+            update_data.append(("tags", interface_config["tags"]))
+            log.debug(f"  - Setting tags to: {interface_config['tags']}")
+        
+        # VLAN configuration
+        if "vlan" in interface_config:
+            vlan_id = interface_config["vlan"]
+            log.info(f"  - Configuring VLAN ID: {vlan_id}")
+            
+            # Find VLAN object in MAAS
+            try:
+                vlans = self.client.request("GET", "vlans/")
+                target_vlan = None
+                for vlan in vlans:
+                    if vlan.get("vid") == vlan_id:
+                        target_vlan = vlan
+                        log.debug(f"    Found VLAN: ID={vlan['id']}, VID={vlan_id}, Fabric={vlan.get('fabric')}")
+                        break
+                
+                if target_vlan:
+                    update_data.append(("vlan", str(target_vlan["id"])))
+                else:
+                    log.warning(f"    VLAN with VID {vlan_id} not found in MAAS")
+            except Exception as e:
+                log.error(f"    Failed to lookup VLAN {vlan_id}: {e}")
+        
+        # Physical interface parameters
+        if "accept_ra" in interface_config:
+            update_data.append(("accept_ra", str(interface_config["accept_ra"]).lower()))
+            log.debug(f"  - Accept RA: {interface_config['accept_ra']}")
+        
+        if "link_connected" in interface_config:
+            update_data.append(("link_connected", str(interface_config["link_connected"]).lower()))
+            log.debug(f"  - Link connected: {interface_config['link_connected']}")
+        
+        if "interface_speed" in interface_config:
+            update_data.append(("interface_speed", str(interface_config["interface_speed"])))
+            log.debug(f"  - Interface speed: {interface_config['interface_speed']} Mbit/s")
+        
+        if "link_speed" in interface_config:
+            update_data.append(("link_speed", str(interface_config["link_speed"])))
+            log.debug(f"  - Link speed: {interface_config['link_speed']} Mbit/s")
+        
+        # Bond parameters
+        if "bond_mode" in interface_config:
+            update_data.append(("bond_mode", interface_config["bond_mode"]))
+            log.debug(f"  - Bond mode: {interface_config['bond_mode']}")
+        
+        if "bond_miimon" in interface_config:
+            update_data.append(("bond_miimon", str(interface_config["bond_miimon"])))
+            log.debug(f"  - Bond miimon: {interface_config['bond_miimon']}")
+        
+        if "bond_downdelay" in interface_config:
+            update_data.append(("bond_downdelay", str(interface_config["bond_downdelay"])))
+            log.debug(f"  - Bond downdelay: {interface_config['bond_downdelay']}")
+        
+        if "bond_updelay" in interface_config:
+            update_data.append(("bond_updelay", str(interface_config["bond_updelay"])))
+            log.debug(f"  - Bond updelay: {interface_config['bond_updelay']}")
+        
+        if "bond_lacp_rate" in interface_config:
+            update_data.append(("bond_lacp_rate", interface_config["bond_lacp_rate"]))
+            log.debug(f"  - Bond LACP rate: {interface_config['bond_lacp_rate']}")
+        
+        if "bond_xmit_hash_policy" in interface_config:
+            update_data.append(("bond_xmit_hash_policy", interface_config["bond_xmit_hash_policy"]))
+            log.debug(f"  - Bond xmit hash policy: {interface_config['bond_xmit_hash_policy']}")
+        
+        # Bridge parameters
+        if "bridge_type" in interface_config:
+            update_data.append(("bridge_type", interface_config["bridge_type"]))
+            log.debug(f"  - Bridge type: {interface_config['bridge_type']}")
+        
+        if "bridge_stp" in interface_config:
+            update_data.append(("bridge_stp", str(interface_config["bridge_stp"]).lower()))
+            log.debug(f"  - Bridge STP: {interface_config['bridge_stp']}")
+        
+        if "bridge_fd" in interface_config:
+            update_data.append(("bridge_fd", str(interface_config["bridge_fd"])))
+            log.debug(f"  - Bridge forward delay: {interface_config['bridge_fd']}")
+        
+        # Update the interface if there are changes
+        if update_data:
+            try:
+                log.debug(f"Calling MAAS API: PUT /api/2.0/nodes/{system_id}/interfaces/{interface_id}/")
+                updated_iface = retry(
+                    lambda: self.client.request(
+                        "PUT",
+                        f"nodes/{system_id}/interfaces/{interface_id}/",
+                        data=update_data
+                    ),
+                    retries=self.max_retries,
+                    delay=2.0
+                )
+                log.info(f"✓ Interface updated successfully")
+            except Exception as e:
+                log.error(f"Failed to update interface: {e}")
+                raise
+        else:
+            log.info("No interface properties to update")
+            updated_iface = self.find_interface_by_name(system_id, interface_name)
+        
+        # Link to subnet if specified
+        subnet_name = interface_config.get("subnet")
+        ip_mode = interface_config.get("ip_mode")
+        ip_address = interface_config.get("ip_address")
+        
+        if subnet_name and ip_mode:
+            log.info(f"  - Linking to subnet: {subnet_name} (mode: {ip_mode})")
+            
+            try:
+                # Find subnet by name or CIDR
+                target_subnet = self.find_subnet_by_name(subnet_name)
+                
+                if not target_subnet:
+                    # Try to find by CIDR
+                    subnets = self.client.request("GET", "subnets/")
+                    for subnet in subnets:
+                        if subnet.get("cidr") == subnet_name:
+                            target_subnet = subnet
+                            log.debug(f"    Found subnet by CIDR: {subnet_name}")
+                            break
+                
+                if not target_subnet:
+                    log.error(f"    Subnet '{subnet_name}' not found in MAAS")
+                    raise ValueError(f"Subnet '{subnet_name}' not found")
+                
+                # Link interface to subnet
+                link_payload = {
+                    "mode": ip_mode.upper(),
+                    "subnet": target_subnet["id"]
+                }
+                
+                if ip_mode.lower() == "static" and ip_address:
+                    link_payload["ip_address"] = ip_address
+                    log.debug(f"    Static IP: {ip_address}")
+                
+                retry(
+                    lambda: self.client.request(
+                        "POST",
+                        f"nodes/{system_id}/interfaces/{interface_id}",
+                        op="link_subnet",
+                        data=link_payload
+                    ),
+                    retries=self.max_retries,
+                    delay=2.0
+                )
+                log.info(f"✓ Linked interface to subnet '{subnet_name}' (CIDR: {target_subnet.get('cidr')})")
+                if ip_mode.lower() == "static" and ip_address:
+                    log.info(f"  - Assigned static IP: {ip_address}")
+                
+            except Exception as e:
+                log.error(f"Failed to link interface to subnet: {e}")
+                raise
+        elif subnet_name and not ip_mode:
+            log.warning(f"Subnet '{subnet_name}' specified but no ip_mode provided - skipping subnet linking")
+            log.info("  To link subnet, add 'ip_mode' field with value: 'static', 'dhcp', or 'automatic'")
+        
+        # Get final interface state
+        try:
+            final_iface = retry(
+                lambda: self.client.request("GET", f"nodes/{system_id}/interfaces/{interface_id}/"),
+                retries=self.max_retries,
+                delay=1.0
+            )
+            log.debug(f"Final interface state: {final_iface.get('name')} - VLAN: {final_iface.get('vlan', {}).get('vid', 'N/A')}")
+            return final_iface
+        except Exception:
+            return updated_iface
 
     def apply_network_config(self, system_id: str, network_config: Dict) -> None:
         """

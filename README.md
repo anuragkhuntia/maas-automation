@@ -130,10 +130,31 @@ Actions run in the order specified:
 - `set_boot_order`: Configure boot device order
 - `configure_storage`: Apply Curtin storage layout (before commissioning)
 - `commission`: Commission machine with optional scripts
-- `configure_network`: Create bonds and configure interfaces (after commission, before deploy)
+- `set_network_bond`: Create bonds from VLAN interfaces (after commission, before deploy)
+- `update_interface`: Update interface properties, VLAN, subnet (after commission, before deploy)
 - `deploy`: Deploy operating system
 - `release`: Release machine and wipe disks
 - `delete`: Remove machine from MAAS
+
+### Network Actions
+
+**`set_network_bond`**: Creates network bonds from interfaces with matching VLAN IDs
+- Automatically finds physical interfaces with specified VLAN
+- Creates bond with specified mode (802.3ad, active-backup, etc.)
+- **NEW:** Supports multiple VLANs per bond - `vlan_id: [1234, 1235]`
+- Automatically creates VLAN interface for each VLAN tag
+- Optionally tags with VLAN and links to subnet
+- See examples: `example_bond_vlan_workflow.json`, `example_multi_vlan_bond.json`
+- See guide: [MULTI_VLAN_BOND_GUIDE.md](MULTI_VLAN_BOND_GUIDE.md)
+
+**`update_interface`**: Updates interface properties using MAAS PUT API
+- Configure VLAN on bond or physical interfaces
+- Link interfaces to subnets with static/DHCP IP assignment
+- Update bond parameters (mode, LACP rate, hash policy)
+- Modify bridge settings (STP, forward delay)
+- Change physical properties (MTU, MAC address, link speed)
+- **Key use case**: Configure VLAN on bond after creation
+- See guide: [UPDATE_INTERFACE_GUIDE.md](UPDATE_INTERFACE_GUIDE.md)
 
 ## Storage Layout
 
@@ -404,3 +425,28 @@ STEP: Deploy Machine
 ✓ Workflow complete. Machine system_id: abc123
 ============================================================
 ```
+
+## Documentation
+
+- [QUICKSTART.md](QUICKSTART.md) - Quick start guide with examples
+- [MULTI_VLAN_BOND_GUIDE.md](MULTI_VLAN_BOND_GUIDE.md) - **NEW:** Multi-VLAN bond configuration guide
+- [UPDATE_INTERFACE_GUIDE.md](UPDATE_INTERFACE_GUIDE.md) - Complete guide for updating interfaces
+- [UPDATE_INTERFACE_QUICKREF.md](UPDATE_INTERFACE_QUICKREF.md) - Quick reference for interface updates
+- [RESERVED_IP_GUIDE.md](RESERVED_IP_GUIDE.md) - Reserved IP management guide
+- [RESERVED_IP_QUICKREF.md](RESERVED_IP_QUICKREF.md) - Reserved IP quick reference
+- [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Implementation details
+- [example_multi_vlan_bond.json](example_multi_vlan_bond.json) - **NEW:** Multi-VLAN bond example
+- [example_bond_vlan_workflow.json](example_bond_vlan_workflow.json) - Bond + VLAN configuration example
+- [example_update_interface.json](example_update_interface.json) - Interface update example
+
+## Contributing
+
+Contributions welcome! Please ensure:
+- Code follows existing style and patterns
+- All functions include docstrings
+- Error handling is robust
+- State polling waits for completion
+
+## License
+
+MIT License

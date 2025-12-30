@@ -1,0 +1,75 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "set_network_bond",
+    "update_interface"
+  ],
+  "machines": [
+    {
+      "hostname": "HYNRBBMPRUFIWAF05.npotech.io",
+      "bonds": [
+        {
+          "name": "prov_bond",
+          "vlan_id": 1551,
+          "mode": "802.3ad",
+          "mtu": 1500,
+          "lacp_rate": "fast",
+          "xmit_hash_policy": "layer3+4",
+          "subnet": "UPI_App_Prov",
+          "ip_mode": "static",
+          "ip_address": "10.83.96.25"
+        }
+      ],
+      "update_interfaces": [
+        {
+          "name": "prov_bond_1551",
+          "vlan": 1551,
+          "subnet": "UPI_App_Prov",
+          "ip_mode": "static",
+          "ip_address": "10.83.96.25",
+          "mtu": 9000
+        }
+      ]
+    }
+  ],
+  "_workflow_explanation": {
+    "step_1": "set_network_bond: Creates bond from interfaces with matching VLAN ID",
+    "step_2": "update_interface: Configures the VLAN-tagged bond interface with subnet and IP",
+    "note": "The VLAN interface name is typically <bond_name>_<vlan_id> (e.g., prov_bond_1551)"
+  },
+  "_parameters": {
+    "update_interface_options": {
+      "required": {
+        "name": "Interface name to update (e.g., 'bond0', 'prov_bond_1551')"
+      },
+      "optional": {
+        "vlan": "VLAN ID to connect interface to",
+        "subnet": "Subnet name or CIDR to link to",
+        "ip_mode": "IP assignment mode: 'static', 'dhcp', or 'automatic'",
+        "ip_address": "Static IP address (required when ip_mode='static')",
+        "mac_address": "Update MAC address (allowed for deployed machines)",
+        "name_update": "New name for the interface",
+        "mtu": "Maximum transmission unit",
+        "tags": "Comma-separated tags",
+        "accept_ra": "Accept router advertisements (IPv6 only)",
+        "link_connected": "Whether interface is physically connected",
+        "interface_speed": "Speed of interface in Mbit/s",
+        "link_speed": "Speed of link in Mbit/s"
+      },
+      "bond_parameters": {
+        "bond_mode": "Bond mode (e.g., '802.3ad', 'active-backup')",
+        "bond_miimon": "Link monitoring frequency in ms",
+        "bond_downdelay": "Time to wait before disabling slave (ms)",
+        "bond_updelay": "Time to wait before enabling slave (ms)",
+        "bond_lacp_rate": "'fast' or 'slow'",
+        "bond_xmit_hash_policy": "Hash policy: 'layer2', 'layer2+3', 'layer3+4', etc."
+      },
+      "bridge_parameters": {
+        "bridge_type": "'standard' or 'ovs'",
+        "bridge_stp": "Enable/disable spanning tree protocol (boolean)",
+        "bridge_fd": "Bridge forward delay in seconds"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "update_interface"
+  ],
+  "machines": [
+    {
+      "hostname": "your-machine-hostname",
+      "update_interfaces": [
+        {
+          "name": "bond0",
+          "vlan": 1551,
+          "subnet": "UPI_App_Prov",
+          "ip_mode": "static",
+          "ip_address": "10.83.96.25"
+        }
+      ]
+    }
+  ],
+  "_comment": "This example demonstrates configuring a VLAN on a bond interface after creation",
+  "_usage": [
+    "1. Create a bond first using 'set_network_bond' action",
+    "2. Then use 'update_interface' to configure VLAN and subnet",
+    "3. The VLAN ID must match the one used during bond creation",
+    "4. Subnet name should match what's configured in MAAS"
+  ]
+}

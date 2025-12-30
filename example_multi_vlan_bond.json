@@ -1,0 +1,114 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "find_machine",
+    "set_network_bond",
+    "update_interface"
+  ],
+  "machines": [
+    {
+      "hostname": "storage",
+      "serial": "WZP293393H8",
+      "pxe_mac": "78:64:a0:f4:05:e8",
+      "power_type": "redfish",
+      "power_parameters": {
+        "power_address": "10.81.31.61",
+        "power_user": "admin",
+        "power_pass": "Cisco@123"
+      },
+      "cloud_init_file": "user-data.yaml",
+      "distro_series": "jammy",
+      
+      "_comment_bonds": "Creates bonds with multiple VLAN tags",
+      "bonds": [
+        {
+          "name": "prov_bond",
+          "vlan_id": [1234, 1235],
+          "mode": "active-backup",
+          "mtu": 9000,
+          "lacp_rate": "fast",
+          "xmit_hash_policy": "layer3+4"
+        },
+        {
+          "name": "data_bond",
+          "vlan_id": 2345,
+          "mode": "802.3ad",
+          "mtu": 9000,
+          "lacp_rate": "fast",
+          "xmit_hash_policy": "layer2"
+        }
+      ],
+      
+      "_comment_update_interfaces": "Configure each VLAN interface with subnet and IP",
+      "update_interfaces": [
+        {
+          "name": "prov_bond_1234",
+          "vlan": 1234,
+          "subnet": "prov",
+          "ip_mode": "dhcp"
+        },
+        {
+          "name": "prov_bond_1235",
+          "vlan": 1235,
+          "subnet": "UPI_App_backup",
+          "ip_mode": "dhcp"
+        },
+        {
+          "name": "data_bond_2345",
+          "vlan": 2345,
+          "subnet": "data",
+          "ip_mode": "dhcp"
+        }
+      ]
+    }
+  ],
+  
+  "_workflow_explanation": {
+    "step_1_find_machine": "Finds the machine by hostname, serial, or PXE MAC",
+    
+    "step_2_set_network_bond": {
+      "prov_bond": [
+        "Finds physical interfaces with VLAN 1234 (primary VLAN)",
+        "Creates bond 'prov_bond' in active-backup mode",
+        "Creates VLAN interface 'prov_bond_1234' for VLAN 1234",
+        "Creates VLAN interface 'prov_bond_1235' for VLAN 1235"
+      ],
+      "data_bond": [
+        "Finds physical interfaces with VLAN 2345",
+        "Creates bond 'data_bond' in 802.3ad (LACP) mode",
+        "Creates VLAN interface 'data_bond_2345' for VLAN 2345"
+      ]
+    },
+    
+    "step_3_update_interface": {
+      "description": "Links each VLAN interface to its subnet with DHCP",
+      "interfaces": [
+        "prov_bond_1234 → subnet 'prov' (DHCP)",
+        "prov_bond_1235 → subnet 'UPI_App_backup' (DHCP)",
+        "data_bond_2345 → subnet 'data' (DHCP)"
+      ]
+    }
+  },
+  
+  "_interface_naming": {
+    "pattern": "<bond_name>_<vlan_id>",
+    "examples": {
+      "prov_bond with VLANs [1234, 1235]": [
+        "prov_bond_1234",
+        "prov_bond_1235"
+      ],
+      "data_bond with VLAN 2345": [
+        "data_bond_2345"
+      ]
+    }
+  },
+  
+  "_key_features": [
+    "Multiple VLANs per bond: vlan_id can be single int or array",
+    "Automatic VLAN interface creation for each VLAN",
+    "Each VLAN interface can be configured separately with update_interface",
+    "Support for both LACP (802.3ad) and active-backup modes",
+    "Flexible subnet linking with static or DHCP IP assignment"
+  ]
+}

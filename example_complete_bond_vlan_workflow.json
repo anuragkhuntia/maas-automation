@@ -1,0 +1,165 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "find_machine",
+    "set_network_bond",
+    "update_interface"
+  ],
+  "machines": [
+    {
+      "hostname": "HYNRBBMPRUFIWAF05.npotech.io",
+      "serial": "HYNRBBMPOD2MAAS",
+      
+      "_comment_step1": "Step 1: Create bond from interfaces with VLAN 1551",
+      "bonds": [
+        {
+          "name": "prov_bond",
+          "vlan_id": 1551,
+          "mode": "802.3ad",
+          "mtu": 1500,
+          "lacp_rate": "fast",
+          "xmit_hash_policy": "layer3+4"
+        }
+      ],
+      
+      "_comment_step2": "Step 2: Configure VLAN interface created by bond",
+      "_note": "MAAS creates interface named 'prov_bond_1551' when bond is tagged with VLAN",
+      "update_interfaces": [
+        {
+          "name": "prov_bond_1551",
+          "vlan": 1551,
+          "subnet": "UPI_App_Prov",
+          "ip_mode": "static",
+          "ip_address": "10.83.96.25",
+          "mtu": 9000
+        }
+      ]
+    }
+  ],
+  
+  "_workflow_explanation": {
+    "overview": "This configuration creates a bond from physical interfaces and configures VLAN with static IP",
+    
+    "prerequisites": [
+      "Machine must have at least 2 physical interfaces with VLAN 1551 visible",
+      "VLAN 1551 must be configured in MAAS",
+      "Subnet 'UPI_App_Prov' must exist in MAAS",
+      "Machine must be in Ready or Broken state (not Deployed)"
+    ],
+    
+    "step_by_step": {
+      "1_find_machine": "Locates machine by hostname and/or serial number",
+      "2_set_network_bond": {
+        "action": "Creates bond from interfaces with VLAN 1551",
+        "details": [
+          "Scans all physical interfaces on the machine",
+          "Identifies interfaces where VLAN 1551 is visible",
+          "Creates bond 'prov_bond' using 802.3ad (LACP) mode",
+          "Automatically creates VLAN interface 'prov_bond_1551'",
+          "LACP configuration: fast rate, layer3+4 hash policy"
+        ]
+      },
+      "3_update_interface": {
+        "action": "Configures the VLAN interface",
+        "details": [
+          "Updates interface 'prov_bond_1551' (created in step 2)",
+          "Sets VLAN to 1551 (matching bond VLAN)",
+          "Links to subnet 'UPI_App_Prov'",
+          "Assigns static IP 10.83.96.25",
+          "Sets MTU to 9000 (jumbo frames)"
+        ]
+      }
+    },
+    
+    "interface_naming": {
+      "pattern": "<bond_name>_<vlan_id>",
+      "example": "prov_bond + 1551 = prov_bond_1551",
+      "note": "MAAS automatically names VLAN interfaces using this pattern"
+    },
+    
+    "common_issues": {
+      "interface_not_found": {
+        "error": "Interface 'prov_bond_1551' not found",
+        "solution": "Verify bond was created successfully in step 2, check interface name"
+      },
+      "vlan_not_found": {
+        "error": "VLAN with VID 1551 not found in MAAS",
+        "solution": "Create VLAN 1551 in MAAS first via web UI or API"
+      },
+      "subnet_not_found": {
+        "error": "Subnet 'UPI_App_Prov' not found",
+        "solution": "Verify subnet name matches MAAS configuration, or use CIDR notation"
+      },
+      "insufficient_interfaces": {
+        "error": "Found only 1 interface(s) with VLAN 1551",
+        "solution": "Ensure at least 2 physical interfaces have VLAN 1551 configured"
+      }
+    }
+  },
+  
+  "_api_endpoints_used": {
+    "find_machine": "GET /MAAS/api/2.0/machines/",
+    "create_bond": "POST /MAAS/api/2.0/nodes/{system_id}/interfaces/?op=create_bond",
+    "update_interface": "PUT /MAAS/api/2.0/nodes/{system_id}/interfaces/{id}/",
+    "link_subnet": "POST /MAAS/api/2.0/nodes/{system_id}/interfaces/{id}/?op=link_subnet"
+  },
+  
+  "_example_variations": {
+    "multiple_bonds": {
+      "description": "Create multiple bonds with different VLANs",
+      "bonds": [
+        {
+          "name": "prov_bond",
+          "vlan_id": 1551,
+          "mode": "802.3ad",
+          "subnet": "UPI_App_Prov",
+          "ip_mode": "static",
+          "ip_address": "10.83.96.25"
+        },
+        {
+          "name": "mgmt_bond",
+          "vlan_id": 100,
+          "mode": "802.3ad",
+          "subnet": "management",
+          "ip_mode": "dhcp"
+        }
+      ]
+    },
+    
+    "dhcp_instead_of_static": {
+      "description": "Use DHCP for IP assignment",
+      "update_interfaces": [
+        {
+          "name": "prov_bond_1551",
+          "vlan": 1551,
+          "subnet": "UPI_App_Prov",
+          "ip_mode": "dhcp"
+        }
+      ]
+    },
+    
+    "active_backup_mode": {
+      "description": "Use active-backup instead of LACP (no switch config needed)",
+      "bonds": [
+        {
+          "name": "prov_bond",
+          "vlan_id": 1551,
+          "mode": "active-backup",
+          "mtu": 1500
+        }
+      ]
+    }
+  },
+  
+  "_network_diagram": {
+    "physical_interfaces": [
+      "enp33s0f1np1 (VLAN 1551 visible)",
+      "enp33s0f0np0 (VLAN 1551 visible)"
+    ],
+    "bond_created": "prov_bond (802.3ad LACP)",
+    "vlan_interface": "prov_bond_1551 (tagged with VLAN 1551)",
+    "subnet": "UPI_App_Prov (10.83.96.0/23)",
+    "static_ip": "10.83.96.25"
+  }
+}

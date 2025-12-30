@@ -295,7 +295,35 @@ class Controller:
                     raise Exception(f"Bond configuration failed for {len(bond_errors)} bond(s): " + "; ".join(bond_errors))
             log.info("")
 
-        # Step 9: Deploy machine
+        # Step 9: Update interface (configure VLAN, subnet, etc.)
+        if 'update_interface' in actions:
+            log.info("=" * 60)
+            log.info("STEP: Update Interface Configuration")
+            log.info("=" * 60)
+            interfaces_cfg = machine_cfg.get('update_interfaces', [])
+            log.debug(f"Interface updates config from machine_cfg: {interfaces_cfg}")
+            if not interfaces_cfg or len(interfaces_cfg) == 0:
+                log.warning("No interface updates configuration provided in machine config")
+            else:
+                log.info(f"Found {len(interfaces_cfg)} interface(s) to update")
+                interface_errors = []
+                for idx, iface_cfg in enumerate(interfaces_cfg, 1):
+                    iface_name = iface_cfg.get('name', f'interface#{idx}')
+                    try:
+                        log.info(f"Updating interface {idx}/{len(interfaces_cfg)}: {iface_name}")
+                        self.network.update_interface(system_id, iface_cfg)
+                        log.info(f"✓ Successfully updated interface: {iface_name}")
+                    except Exception as e:
+                        error_msg = f"Failed to update interface {iface_name}: {e}"
+                        log.error(error_msg)
+                        interface_errors.append(error_msg)
+                
+                # If any interfaces failed, raise an error
+                if interface_errors:
+                    raise Exception(f"Interface update failed for {len(interface_errors)} interface(s): " + "; ".join(interface_errors))
+            log.info("")
+
+        # Step 10: Deploy machine
         if 'deploy' in actions:
             log.info("=" * 60)
             log.info("STEP: Deploy Machine")
@@ -321,7 +349,7 @@ class Controller:
                               wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 10: Release machine
+        # Step 11: Release machine
         if 'release' in actions:
             log.info("=" * 60)
             log.info("STEP: Release Machine")
@@ -332,7 +360,7 @@ class Controller:
             self.machine.release(system_id, erase=erase, wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 11: Delete machine
+        # Step 12: Delete machine
         if 'delete' in actions:
             log.info("=" * 60)
             log.info("STEP: Delete Machine")

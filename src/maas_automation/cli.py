@@ -26,6 +26,7 @@ VALID_ACTIONS = {
     'configure_storage',
     'commission',
     'set_network_bond',
+    'update_interface',
     'deploy',
     'release',
     'delete',
@@ -61,6 +62,7 @@ def print_available_actions():
     print("  • set_boot_order     - Configure boot device priority")
     print("  • configure_storage  - Set up storage layout")
     print("  • set_network_bond   - Configure network bond from VLAN interfaces")
+    print("  • update_interface   - Update interface properties (VLAN, subnet, etc.)")
     print("\nInformation:")
     print("  • list               - List all machines")
     print("  • list_machine_network - Show detailed machine network info")
