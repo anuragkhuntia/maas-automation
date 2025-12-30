@@ -58,6 +58,23 @@ class NetworkManager:
             log.error(f"Failed to search for subnet '{subnet_name}': {e}")
             return None
 
+    def find_vlan_by_vid(self, vlan_vid: int) -> Optional[Dict]:
+        """Find a VLAN by its VID across all fabrics"""
+        try:
+            fabrics = self.client.request("GET", "fabrics/")
+            for fabric in fabrics:
+                fabric_id = fabric.get("id")
+                fabric_vlans = self.client.request("GET", f"fabrics/{fabric_id}/vlans/")
+                for vlan in fabric_vlans:
+                    if vlan.get("vid") == vlan_vid:
+                        log.debug(f"Found VLAN VID {vlan_vid}: ID={vlan['id']}, Fabric={fabric.get('name')}")
+                        return vlan
+            log.warning(f"VLAN with VID {vlan_vid} not found in any fabric")
+            return None
+        except Exception as e:
+            log.error(f"Failed to search for VLAN VID {vlan_vid}: {e}")
+            return None
+
     def create_bond(self, system_id: str, bond_config: Dict) -> Dict:
         """
         Create a network bond from multiple interfaces.
@@ -158,29 +175,8 @@ class NetworkManager:
         log.info(f"Creating VLAN interface with tag {vlan_id} on parent {parent_name} (ID: {parent_id})")
         
         try:
-            # First, get the VLAN object from MAAS for this VLAN ID
-            vlans = self.client.request("GET", "vlans/")
-            target_vlan = None
-            for vlan in vlans:
-                if vlan.get("vid") == vlan_id:
-                    target_vlan = vlan
-                    log.debug(f"Found VLAN object: ID={vlan['id']}, VID={vlan_id}, Fabric={vlan.get('fabric')}")
-                    break
-            
-            if not target_vlan:
-                log.warning(f"VLAN with VID {vlan_id} not found in MAAS. Attempting to use default fabric...")
-                # Get default fabric and try to find/create VLAN there
-                fabrics = self.client.request("GET", "fabrics/")
-                if fabrics and len(fabrics) > 0:
-                    default_fabric = fabrics[0]
-                    log.info(f"Using fabric: {default_fabric.get('name')} (ID: {default_fabric['id']})")
-                    
-                    # Check if VLAN exists on this fabric
-                    fabric_vlans = self.client.request("GET", f"fabrics/{default_fabric['id']}/vlans/")
-                    for vlan in fabric_vlans:
-                        if vlan.get("vid") == vlan_id:
-                            target_vlan = vlan
-                            break
+            # Find the VLAN object from MAAS for this VLAN ID
+            target_vlan = self.find_vlan_by_vid(vlan_id)
             
             if not target_vlan:
                 raise ValueError(f"VLAN with VID {vlan_id} not found in MAAS. Please create it first.")
@@ -598,32 +594,10 @@ class NetworkManager:
                 try:
                     # First, look up VLAN resource to get VLAN details
                     log.info(f"Step 1: Looking up VLAN resource for VID {vlan_tag}...")
-                    vlans = self.client.request("GET", "vlans/")
-                    log.debug(f"Retrieved {len(vlans)} VLANs from MAAS")
-                    
-                    target_vlan = None
-                    for vlan in vlans:
-                        vlan_vid = vlan.get("vid")
-                        vlan_id = vlan.get("id")
-                        vlan_name = vlan.get("name", "N/A")
-                        vlan_fabric = vlan.get("fabric", "N/A")
-                        log.debug(f"  - VLAN: VID={vlan_vid}, ID={vlan_id}, Name={vlan_name}, Fabric={vlan_fabric}")
-                        
-                        if vlan_vid == vlan_tag:
-                            target_vlan = vlan
-                            log.info(f"✓ Found matching VLAN:")
-                            log.info(f"  - VID: {vlan_vid}")
-                            log.info(f"  - Resource ID: {vlan_id}")
-                            log.info(f"  - Name: {vlan_name}")
-                            log.info(f"  - Fabric: {vlan_fabric}")
-                            log.info(f"  - Resource URI: {vlan.get('resource_uri', 'N/A')}")
-                            break
+                    target_vlan = self.find_vlan_by_vid(vlan_tag)
                     
                     if not target_vlan:
                         log.error(f"✗ VLAN with VID {vlan_tag} not found in MAAS")
-                        log.error(f"  Available VLANs:")
-                        for vlan in vlans[:10]:  # Show first 10
-                            log.error(f"    - VID {vlan.get('vid')}: {vlan.get('name')} (ID: {vlan.get('id')})")
                         log.error(f"  Please create VLAN {vlan_tag} in MAAS first via web UI")
                         if vlan_idx == 1:
                             raise ValueError(f"VLAN {vlan_tag} not found in MAAS")
@@ -813,16 +787,11 @@ class NetworkManager:
             
             # Find VLAN object in MAAS
             try:
-                vlans = self.client.request("GET", "vlans/")
-                target_vlan = None
-                for vlan in vlans:
-                    if vlan.get("vid") == vlan_id:
-                        target_vlan = vlan
-                        log.debug(f"    Found VLAN: ID={vlan['id']}, VID={vlan_id}, Fabric={vlan.get('fabric')}")
-                        break
+                target_vlan = self.find_vlan_by_vid(vlan_id)
                 
                 if target_vlan:
                     update_data.append(("vlan", str(target_vlan["id"])))
+                    log.debug(f"    Found VLAN: ID={target_vlan['id']}, VID={vlan_id}")
                 else:
                     log.warning(f"    VLAN with VID {vlan_id} not found in MAAS")
             except Exception as e:
@@ -1138,26 +1107,16 @@ class NetworkManager:
             try:
                 # Look up VLAN resource to get VLAN details
                 log.info(f"Step 1: Looking up VLAN resource for VID {vlan_tag}...")
-                vlans = self.client.request("GET", "vlans/")
-                log.debug(f"Retrieved {len(vlans)} VLANs from MAAS")
+                target_vlan = self.find_vlan_by_vid(vlan_tag)
                 
-                target_vlan = None
-                for vlan in vlans:
-                    vlan_vid = vlan.get("vid")
-                    if vlan_vid == vlan_tag:
-                        target_vlan = vlan
-                        log.info(f"✓ Found matching VLAN:")
-                        log.info(f"  - VID: {vlan_vid}")
-                        log.info(f"  - Resource ID: {vlan.get('id')}")
-                        log.info(f"  - Name: {vlan.get('name', 'N/A')}")
-                        log.info(f"  - Fabric: {vlan.get('fabric', 'N/A')}")
-                        break
-                
-                if not target_vlan:
+                if target_vlan:
+                    log.info(f"✓ Found matching VLAN:")
+                    log.info(f"  - VID: {vlan_tag}")
+                    log.info(f"  - Resource ID: {target_vlan.get('id')}")
+                    log.info(f"  - Name: {target_vlan.get('name', 'N/A')}")
+                    log.info(f"  - Fabric: {target_vlan.get('fabric', 'N/A')}")
+                else:
                     log.error(f"✗ VLAN with VID {vlan_tag} not found in MAAS")
-                    log.error(f"  Available VLANs:")
-                    for vlan in vlans[:10]:  # Show first 10
-                        log.error(f"    - VID {vlan.get('vid')}: {vlan.get('name')} (ID: {vlan.get('id')})")
                     log.error(f"  Please create VLAN {vlan_tag} in MAAS first via web UI")
                     if vlan_idx == 1:
                         raise ValueError(f"VLAN {vlan_tag} not found in MAAS")
