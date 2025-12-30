@@ -549,6 +549,37 @@ class NetworkManager:
                     else:
                         log.info(f"✓ Found subnet '{subnet_name}' (CIDR: {target_subnet.get('cidr')})")
                         
+                        # Link the bond to subnet BEFORE creating VLAN interfaces
+                        log.info(f"\nLinking bond '{bond_name}' to subnet '{subnet_name}'...")
+                        try:
+                            link_payload = {
+                                "mode": ip_mode.upper(),
+                                "subnet": target_subnet["id"]
+                            }
+                            
+                            if ip_mode == "static" and ip_address:
+                                link_payload["ip_address"] = ip_address
+                            
+                            retry(
+                                lambda: self.client.request(
+                                    "POST",
+                                    f"nodes/{system_id}/interfaces/{bond['id']}",
+                                    op="link_subnet",
+                                    data=link_payload
+                                ),
+                                retries=self.max_retries,
+                                delay=2.0
+                            )
+                            log.info(f"✓ Linked bond to subnet '{subnet_name}'")
+                            log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
+                            log.info(f"  - IP Mode: {ip_mode}")
+                            if ip_mode == "static" and ip_address:
+                                log.info(f"  - Static IP: {ip_address}")
+                            
+                        except Exception as subnet_error:
+                            log.error(f"✗ Failed to link bond to subnet: {subnet_error}")
+                            log.warning(f"Bond created but subnet linking failed")
+                        
                 except Exception as subnet_error:
                     log.error(f"✗ Failed to lookup subnet '{subnet_name}': {subnet_error}")
                     log.warning(f"Bond '{bond_name}' created but subnet lookup failed")
@@ -562,52 +593,39 @@ class NetworkManager:
             last_vlan_interface = None
             
             for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
-                log.info(f"\nTagging bond '{bond_name}' with VLAN ID {vlan_tag} ({vlan_idx}/{len(vlan_ids)})...")
+                log.info(f"\nCreating VLAN interface for VLAN {vlan_tag} on bond '{bond_name}' ({vlan_idx}/{len(vlan_ids)})...")
                 try:
-                    tagged_bond = self.create_vlan_interface(system_id, bond['id'], vlan_tag, bond_name)
-                    log.info(f"✓ Successfully tagged bond with VLAN {vlan_tag}")
-                    log.info(f"  - VLAN Interface ID: {tagged_bond.get('id')}")
-                    log.info(f"  - VLAN Interface Name: {tagged_bond.get('name')}")
+                    # Use the create_vlan operation which just needs parent and VLAN ID
+                    vlan_payload = [
+                        ("parents", str(bond['id'])),
+                        ("vlan", str(vlan_tag))
+                    ]
                     
-                    created_vlan_interfaces.append(tagged_bond)
-                    last_vlan_interface = tagged_bond
+                    log.debug(f"Creating VLAN interface with payload: {vlan_payload}")
                     
-                    # Only link subnet to primary VLAN if subnet is specified and this is the first VLAN
-                    if vlan_idx == 1 and subnet_name and ip_mode and target_subnet:
-                        log.info(f"\nLinking primary VLAN interface to subnet '{subnet_name}'...")
-                        try:
-                            link_payload = {
-                                "mode": ip_mode.upper(),
-                                "subnet": target_subnet["id"]
-                            }
-                            
-                            if ip_mode == "static" and ip_address:
-                                link_payload["ip_address"] = ip_address
-                            
-                            retry(
-                                lambda: self.client.request(
-                                    "POST",
-                                    f"nodes/{system_id}/interfaces/{tagged_bond['id']}",
-                                    op="link_subnet",
-                                    data=link_payload
-                                ),
-                                retries=self.max_retries,
-                                delay=2.0
-                            )
-                            log.info(f"✓ Linked VLAN interface to subnet '{subnet_name}'")
-                            log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
-                            log.info(f"  - IP Mode: {ip_mode}")
-                            if ip_mode == "static" and ip_address:
-                                log.info(f"  - Static IP: {ip_address}")
-                            
-                        except Exception as subnet_error:
-                            log.error(f"✗ Failed to link subnet to VLAN interface: {subnet_error}")
-                            log.warning(f"VLAN-tagged bond created but subnet linking failed")
+                    vlan_iface = retry(
+                        lambda: self.client.request(
+                            "POST",
+                            f"nodes/{system_id}/interfaces",
+                            op="create_vlan",
+                            data=vlan_payload
+                        ),
+                        retries=self.max_retries,
+                        delay=2.0
+                    )
+                    
+                    log.info(f"✓ Successfully created VLAN interface for VLAN {vlan_tag}")
+                    log.info(f"  - VLAN Interface ID: {vlan_iface.get('id')}")
+                    log.info(f"  - VLAN Interface Name: {vlan_iface.get('name')}")
+                    
+                    created_vlan_interfaces.append(vlan_iface)
+                    last_vlan_interface = vlan_iface
                     
                 except Exception as vlan_error:
-                    log.error(f"✗ Failed to tag bond with VLAN {vlan_tag}: {vlan_error}")
+                    log.error(f"✗ Failed to create VLAN interface for VLAN {vlan_tag}: {vlan_error}")
                     if vlan_idx == 1:
                         # If first VLAN fails, this is critical
+                        log.error(f"First VLAN creation failed - this is critical")
                         raise
                     else:
                         # For subsequent VLANs, log but continue
@@ -617,10 +635,13 @@ class NetworkManager:
             if len(created_vlan_interfaces) > 0:
                 log.info(f"\n✓ Created {len(created_vlan_interfaces)} VLAN interface(s) on bond '{bond_name}':")
                 for vlan_iface in created_vlan_interfaces:
-                    log.info(f"  - {vlan_iface.get('name')} (VLAN {vlan_iface.get('vlan', {}).get('vid', 'N/A')})")
+                    vlan_vid = vlan_iface.get('vlan', {}).get('vid', 'N/A') if isinstance(vlan_iface.get('vlan'), dict) else 'N/A'
+                    log.info(f"  - {vlan_iface.get('name')} (VLAN {vlan_vid})")
+                log.info(f"\n💡 Next step: Use 'update_interface' action to configure subnet/IP for each VLAN interface")
                 return last_vlan_interface
             else:
                 # No VLAN interfaces created, return the bond
+                log.info(f"\n✓ Bond '{bond_name}' created (no VLAN interfaces)")
                 return bond
             
         except Exception as e:
