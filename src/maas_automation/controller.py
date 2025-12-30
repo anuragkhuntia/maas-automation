@@ -300,10 +300,14 @@ class Controller:
             log.info("=" * 60)
             log.info("STEP: Add VLAN(s) to Bond(s)")
             log.info("=" * 60)
-            vlan_configs = machine_cfg.get('vlan_configs', [])
+            # Support both 'vlan_config' (singular) and 'vlan_configs' (plural)
+            vlan_configs = machine_cfg.get('vlan_configs') or machine_cfg.get('vlan_config', [])
+            # Ensure it's always a list
+            if vlan_configs and not isinstance(vlan_configs, list):
+                vlan_configs = [vlan_configs]
             log.debug(f"VLAN configs from machine_cfg: {vlan_configs}")
             if not vlan_configs or len(vlan_configs) == 0:
-                log.warning("No VLAN configurations provided in machine config")
+                log.warning("No VLAN configurations provided in machine config (looking for 'vlan_configs' or 'vlan_config')")
             else:
                 log.info(f"Found {len(vlan_configs)} VLAN configuration(s) to apply")
                 vlan_errors = []

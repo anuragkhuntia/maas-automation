@@ -1179,16 +1179,31 @@ class NetworkManager:
                 log.info(f"  - API Endpoint: POST /MAAS/api/2.0/nodes/{system_id}/interfaces/?op=create_vlan")
                 log.debug(f"  - Payload: {vlan_payload}")
                 
-                vlan_iface = retry(
-                    lambda: self.client.request(
-                        "POST",
-                        f"nodes/{system_id}/interfaces",
-                        op="create_vlan",
-                        data=vlan_payload
-                    ),
-                    retries=self.max_retries,
-                    delay=2.0
-                )
+                try:
+                    vlan_iface = retry(
+                        lambda: self.client.request(
+                            "POST",
+                            f"nodes/{system_id}/interfaces",
+                            op="create_vlan",
+                            data=vlan_payload
+                        ),
+                        retries=self.max_retries,
+                        delay=2.0
+                    )
+                except Exception as api_error:
+                    # Try with machines endpoint if nodes fails
+                    log.warning(f"Failed with 'nodes' endpoint, trying 'machines' endpoint...")
+                    log.debug(f"Original error: {api_error}")
+                    vlan_iface = retry(
+                        lambda: self.client.request(
+                            "POST",
+                            f"machines/{system_id}/interfaces",
+                            op="create_vlan",
+                            data=vlan_payload
+                        ),
+                        retries=self.max_retries,
+                        delay=2.0
+                    )
                 
                 log.info(f"\n✓ Successfully created VLAN interface!")
                 log.info(f"  - VLAN Interface ID: {vlan_iface.get('id')}")
