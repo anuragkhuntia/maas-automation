@@ -186,10 +186,11 @@ class NetworkManager:
                 raise ValueError(f"VLAN with VID {vlan_id} not found in MAAS. Please create it first.")
             
             # Create VLAN interface using the parent and VLAN
-            payload = {
-                "vlan": target_vlan["id"],
-                "parents": [parent_id]
-            }
+            # API expects form-data: parent (integer) and vlan (string)
+            payload = [
+                ("parent", str(parent_id)),
+                ("vlan", str(target_vlan["id"]))
+            ]
             
             log.debug(f"VLAN interface payload: {payload}")
             
