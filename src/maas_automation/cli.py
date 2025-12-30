@@ -25,6 +25,8 @@ VALID_ACTIONS = {
     'set_boot_order',
     'configure_storage',
     'commission',
+    'create_bond',
+    'add_vlan_to_bond',
     'set_network_bond',
     'update_interface',
     'deploy',
@@ -61,7 +63,10 @@ def print_available_actions():
     print("  • set_bios           - Apply BIOS/UEFI settings")
     print("  • set_boot_order     - Configure boot device priority")
     print("  • configure_storage  - Set up storage layout")
-    print("  • set_network_bond   - Configure network bond from VLAN interfaces")
+    print("\nNetwork:")
+    print("  • create_bond        - Create a bond from specified interfaces")
+    print("  • add_vlan_to_bond   - Add VLAN interface(s) to an existing bond")
+    print("  • set_network_bond   - Configure network bond from VLAN interfaces (legacy)")
     print("  • update_interface   - Update interface properties (VLAN, subnet, etc.)")
     print("\nInformation:")
     print("  • list               - List all machines")

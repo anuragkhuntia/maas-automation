@@ -971,6 +971,263 @@ class NetworkManager:
         except Exception:
             return updated_iface
 
+    def create_bond_simple(self, system_id: str, bond_config: Dict) -> Dict:
+        """
+        Create a network bond from specified interfaces without VLAN logic.
+        This is a simpler version that just creates the bond interface.
+        
+        Args:
+            system_id: Machine system ID
+            bond_config: Bond configuration with keys:
+                - name: Bond name (e.g., "bond0")
+                - interfaces: List of interface names to bond (e.g., ["eth0", "eth1"])
+                - mode: Bond mode (e.g., "802.3ad", "active-backup", "balance-rr")
+                - mtu: MTU size (optional, default: 1500)
+                - lacp_rate: "fast" or "slow" (optional, default: "fast" for 802.3ad)
+                - xmit_hash_policy: Hash policy (optional, default: "layer3+4" for 802.3ad)
+        
+        Returns:
+            Created bond interface details
+        
+        Example config:
+        {
+            "name": "bond0",
+            "interfaces": ["eth0", "eth1"],
+            "mode": "802.3ad",
+            "mtu": 9000,
+            "lacp_rate": "fast",
+            "xmit_hash_policy": "layer3+4"
+        }
+        """
+        bond_name = bond_config.get("name")
+        interface_names = bond_config.get("interfaces", [])
+        bond_mode = bond_config.get("mode", "802.3ad")
+        mtu = bond_config.get("mtu", 1500)
+        
+        if not bond_name:
+            raise ValueError("Bond config must have 'name'")
+        if not interface_names or len(interface_names) < 2:
+            raise ValueError("Bond requires at least 2 interfaces")
+        
+        log.info(f"Creating bond '{bond_name}' with interfaces: {', '.join(interface_names)}")
+        log.info(f"  - Mode: {bond_mode}")
+        log.info(f"  - MTU: {mtu}")
+        
+        # Get interface IDs
+        interfaces = self.get_interfaces(system_id)
+        interface_ids = []
+        
+        for iface_name in interface_names:
+            found = False
+            for iface in interfaces:
+                if iface.get("name") == iface_name:
+                    interface_ids.append(iface["id"])
+                    log.debug(f"  Found interface '{iface_name}' (ID: {iface['id']})")
+                    found = True
+                    break
+            if not found:
+                raise ValueError(f"Interface '{iface_name}' not found on machine {system_id}")
+        
+        log.debug(f"Interface IDs for bond: {interface_ids}")
+        
+        # Create bond - parents must be sent as separate parameters
+        payload = [
+            ("name", bond_name),
+            ("bond_mode", bond_mode),
+            ("mtu", str(mtu))
+        ]
+        
+        # Add each parent interface ID separately
+        for iface_id in interface_ids:
+            payload.append(("parents", str(iface_id)))
+        
+        # Add bond parameters based on mode
+        if bond_mode == "802.3ad":
+            lacp_rate = bond_config.get("lacp_rate", "fast")
+            xmit_hash = bond_config.get("xmit_hash_policy", "layer3+4")
+            payload.append(("bond_lacp_rate", lacp_rate))
+            payload.append(("bond_xmit_hash_policy", xmit_hash))
+            log.debug(f"  - LACP rate: {lacp_rate}")
+            log.debug(f"  - Transmit hash policy: {xmit_hash}")
+        
+        log.debug(f"Bond payload: {payload}")
+        
+        try:
+            bond = retry(
+                lambda: self.client.request(
+                    "POST",
+                    f"nodes/{system_id}/interfaces",
+                    op="create_bond",
+                    data=payload
+                ),
+                retries=self.max_retries,
+                delay=2.0
+            )
+            log.info(f"✓ Successfully created bond: {bond_name}")
+            log.info(f"  - Bond ID: {bond['id']}")
+            log.info(f"  - Bond Name: {bond.get('name')}")
+            log.info(f"  - Parent Interfaces: {', '.join(interface_names)}")
+            return bond
+        except Exception as e:
+            error_msg = str(e)
+            # Check if bond already exists
+            if "already" in error_msg.lower() or "exists" in error_msg.lower() or "duplicate" in error_msg.lower():
+                log.warning(f"Bond '{bond_name}' already exists on machine {system_id}")
+                raise ValueError(f"Bond '{bond_name}' already exists")
+            else:
+                log.error(f"Failed to create bond '{bond_name}': {e}")
+                raise
+
+    def add_vlan_to_bond(self, system_id: str, vlan_config: Dict) -> List[Dict]:
+        """
+        Add VLAN interface(s) to an existing bond.
+        
+        Args:
+            system_id: Machine system ID
+            vlan_config: VLAN configuration with keys:
+                - bond_name: Name of the bond to add VLAN to (e.g., "bond0")
+                - vlan_ids: Single VLAN ID (int) or list of VLAN IDs [int, int, ...]
+        
+        Returns:
+            List of created VLAN interface details
+        
+        Example config (single VLAN):
+        {
+            "bond_name": "bond0",
+            "vlan_ids": 100
+        }
+        
+        Example config (multiple VLANs):
+        {
+            "bond_name": "bond0",
+            "vlan_ids": [100, 200, 300]
+        }
+        """
+        bond_name = vlan_config.get("bond_name")
+        vlan_id_config = vlan_config.get("vlan_ids")
+        
+        if not bond_name:
+            raise ValueError("VLAN config must have 'bond_name'")
+        if vlan_id_config is None:
+            raise ValueError("VLAN config must have 'vlan_ids'")
+        
+        # Support both single VLAN and multiple VLANs
+        if isinstance(vlan_id_config, list):
+            vlan_ids = vlan_id_config
+            log.info(f"Adding {len(vlan_ids)} VLAN(s) to bond '{bond_name}': {vlan_ids}")
+        else:
+            vlan_ids = [vlan_id_config]
+            log.info(f"Adding VLAN {vlan_id_config} to bond '{bond_name}'")
+        
+        # Find the bond interface
+        bond_iface = self.find_interface_by_name(system_id, bond_name)
+        if not bond_iface:
+            raise ValueError(f"Bond '{bond_name}' not found on machine {system_id}")
+        
+        bond_id = bond_iface["id"]
+        log.info(f"Found bond '{bond_name}' (ID: {bond_id})")
+        
+        created_vlan_interfaces = []
+        
+        for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
+            log.info(f"\n{'='*60}")
+            log.info(f"Creating VLAN interface {vlan_idx}/{len(vlan_ids)} for VLAN {vlan_tag}")
+            log.info(f"{'='*60}")
+            
+            try:
+                # Look up VLAN resource to get VLAN details
+                log.info(f"Step 1: Looking up VLAN resource for VID {vlan_tag}...")
+                vlans = self.client.request("GET", "vlans/")
+                log.debug(f"Retrieved {len(vlans)} VLANs from MAAS")
+                
+                target_vlan = None
+                for vlan in vlans:
+                    vlan_vid = vlan.get("vid")
+                    if vlan_vid == vlan_tag:
+                        target_vlan = vlan
+                        log.info(f"✓ Found matching VLAN:")
+                        log.info(f"  - VID: {vlan_vid}")
+                        log.info(f"  - Resource ID: {vlan.get('id')}")
+                        log.info(f"  - Name: {vlan.get('name', 'N/A')}")
+                        log.info(f"  - Fabric: {vlan.get('fabric', 'N/A')}")
+                        break
+                
+                if not target_vlan:
+                    log.error(f"✗ VLAN with VID {vlan_tag} not found in MAAS")
+                    log.error(f"  Available VLANs:")
+                    for vlan in vlans[:10]:  # Show first 10
+                        log.error(f"    - VID {vlan.get('vid')}: {vlan.get('name')} (ID: {vlan.get('id')})")
+                    log.error(f"  Please create VLAN {vlan_tag} in MAAS first via web UI")
+                    if vlan_idx == 1:
+                        raise ValueError(f"VLAN {vlan_tag} not found in MAAS")
+                    else:
+                        log.warning(f"Skipping VLAN {vlan_tag} and continuing...")
+                        continue
+                
+                # Create VLAN interface using parent bond ID and VLAN resource ID
+                log.info(f"\nStep 2: Creating VLAN interface...")
+                log.info(f"  - Bond ID: {bond_id}")
+                log.info(f"  - Bond Name: {bond_name}")
+                log.info(f"  - VLAN VID: {vlan_tag}")
+                log.info(f"  - VLAN Resource ID: {target_vlan['id']}")
+                
+                vlan_payload = [
+                    ("parent", str(bond_id)),
+                    ("vlan", str(target_vlan['id']))
+                ]
+                
+                log.info(f"  - API Endpoint: POST /MAAS/api/2.0/nodes/{system_id}/interfaces/?op=create_vlan")
+                log.debug(f"  - Payload: {vlan_payload}")
+                
+                vlan_iface = retry(
+                    lambda: self.client.request(
+                        "POST",
+                        f"nodes/{system_id}/interfaces",
+                        op="create_vlan",
+                        data=vlan_payload
+                    ),
+                    retries=self.max_retries,
+                    delay=2.0
+                )
+                
+                log.info(f"\n✓ Successfully created VLAN interface!")
+                log.info(f"  - VLAN Interface ID: {vlan_iface.get('id')}")
+                log.info(f"  - VLAN Interface Name: {vlan_iface.get('name')}")
+                log.info(f"  - Expected name format: {bond_name}.{vlan_tag}")
+                
+                created_vlan_interfaces.append(vlan_iface)
+                
+            except Exception as vlan_error:
+                log.error(f"\n✗ Failed to create VLAN interface for VLAN {vlan_tag}")
+                log.error(f"  Error type: {type(vlan_error).__name__}")
+                log.error(f"  Error message: {str(vlan_error)}")
+                
+                if vlan_idx == 1:
+                    # If first VLAN fails, this is critical
+                    log.error(f"\n{'='*60}")
+                    log.error(f"CRITICAL: First VLAN creation failed")
+                    log.error(f"{'='*60}")
+                    raise
+                else:
+                    # For subsequent VLANs, log but continue
+                    log.warning(f"Continuing with remaining VLANs...")
+        
+        # Summary
+        if len(created_vlan_interfaces) > 0:
+            log.info(f"\n{'='*60}")
+            log.info(f"✓ Created {len(created_vlan_interfaces)} VLAN interface(s) on bond '{bond_name}':")
+            for vlan_iface in created_vlan_interfaces:
+                vlan_vid = vlan_iface.get('vlan', {}).get('vid', 'N/A') if isinstance(vlan_iface.get('vlan'), dict) else 'N/A'
+                log.info(f"  - {vlan_iface.get('name')} (VLAN {vlan_vid})")
+            log.info(f"\n💡 Next step: Use 'update_interface' action with these names:")
+            for vlan_iface in created_vlan_interfaces:
+                log.info(f"     - name: \"{vlan_iface.get('name')}\"")
+            log.info(f"{'='*60}")
+        else:
+            log.warning(f"No VLAN interfaces were created")
+        
+        return created_vlan_interfaces
+
     def apply_network_config(self, system_id: str, network_config: Dict) -> None:
         """
         Apply complete network configuration to a machine.

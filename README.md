@@ -130,7 +130,9 @@ Actions run in the order specified:
 - `set_boot_order`: Configure boot device order
 - `configure_storage`: Apply Curtin storage layout (before commissioning)
 - `commission`: Commission machine with optional scripts
-- `set_network_bond`: Create bonds from VLAN interfaces (after commission, before deploy)
+- `create_bond`: Create bond from specified interfaces (after commission, before deploy)
+- `add_vlan_to_bond`: Add VLAN interface(s) to existing bond (after commission, before deploy)
+- `set_network_bond`: Create bonds from VLAN interfaces (legacy, after commission, before deploy)
 - `update_interface`: Update interface properties, VLAN, subnet (after commission, before deploy)
 - `deploy`: Deploy operating system
 - `release`: Release machine and wipe disks
@@ -138,10 +140,22 @@ Actions run in the order specified:
 
 ### Network Actions
 
-**`set_network_bond`**: Creates network bonds from interfaces with matching VLAN IDs
+**`create_bond`**: Creates a bond from specified physical interfaces (NEW)
+- Specify exact interface names to bond together (e.g., ["eth0", "eth1"])
+- Configure bond mode (802.3ad, active-backup, etc.)
+- Set MTU, LACP rate, and hash policy
+- See example: `example_create_bond.json`
+
+**`add_vlan_to_bond`**: Adds VLAN interface(s) to an existing bond (NEW)
+- Specify bond name and VLAN ID(s) to add
+- Supports single VLAN or multiple VLANs
+- Bond must already exist (use `create_bond` first)
+- See example: `example_add_vlan_to_bond.json`
+
+**`set_network_bond`**: Creates network bonds from interfaces with matching VLAN IDs (LEGACY)
 - Automatically finds physical interfaces with specified VLAN
 - Creates bond with specified mode (802.3ad, active-backup, etc.)
-- **NEW:** Supports multiple VLANs per bond - `vlan_id: [1234, 1235]`
+- Supports multiple VLANs per bond - `vlan_id: [1234, 1235]`
 - Automatically creates VLAN interface for each VLAN tag
 - Optionally tags with VLAN and links to subnet
 - See examples: `example_bond_vlan_workflow.json`, `example_multi_vlan_bond.json`

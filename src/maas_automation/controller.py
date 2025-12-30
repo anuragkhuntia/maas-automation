@@ -252,7 +252,78 @@ class Controller:
             self.machine.commission(system_id, scripts=scripts, wait=wait, timeout=timeout)
             log.info("")
 
-        # Step 8: Configure network bonds - after commission, before deploy
+        # Step 7a: Create bonds - after commission, before deploy
+        if 'create_bond' in actions:
+            log.info("=" * 60)
+            log.info("STEP: Create Bond(s)")
+            log.info("=" * 60)
+            bonds_cfg = machine_cfg.get('bonds', [])
+            log.debug(f"Bonds config from machine_cfg: {bonds_cfg}")
+            if not bonds_cfg or len(bonds_cfg) == 0:
+                log.warning("No bonds configuration provided in machine config")
+            else:
+                log.info(f"Found {len(bonds_cfg)} bond(s) to create")
+                bond_errors = []
+                skipped_bonds = []
+                for idx, bond_cfg in enumerate(bonds_cfg, 1):
+                    bond_name = bond_cfg.get('name', f'bond#{idx}')
+                    try:
+                        log.info(f"Creating bond {idx}/{len(bonds_cfg)}: {bond_name}")
+                        self.network.create_bond_simple(system_id, bond_cfg)
+                        log.info(f"✓ Successfully created bond: {bond_name}")
+                    except ValueError as e:
+                        # Handle "already exists" errors without failing
+                        error_msg = str(e)
+                        if "already exists" in error_msg:
+                            log.warning(f"Bond '{bond_name}' already exists - skipping")
+                            skipped_bonds.append(bond_name)
+                        else:
+                            error_msg = f"Failed to create bond {bond_name}: {e}"
+                            log.error(error_msg)
+                            bond_errors.append(error_msg)
+                    except Exception as e:
+                        error_msg = f"Failed to create bond {bond_name}: {e}"
+                        log.error(error_msg)
+                        bond_errors.append(error_msg)
+                
+                # Summary
+                if skipped_bonds:
+                    log.info(f"⚠️  Skipped {len(skipped_bonds)} existing bond(s): {', '.join(skipped_bonds)}")
+                
+                # If any bonds failed (not just skipped), raise an error
+                if bond_errors:
+                    raise Exception(f"Bond creation failed for {len(bond_errors)} bond(s): " + "; ".join(bond_errors))
+            log.info("")
+
+        # Step 7b: Add VLAN to bonds - after creating bonds, before deploy
+        if 'add_vlan_to_bond' in actions:
+            log.info("=" * 60)
+            log.info("STEP: Add VLAN(s) to Bond(s)")
+            log.info("=" * 60)
+            vlan_configs = machine_cfg.get('vlan_configs', [])
+            log.debug(f"VLAN configs from machine_cfg: {vlan_configs}")
+            if not vlan_configs or len(vlan_configs) == 0:
+                log.warning("No VLAN configurations provided in machine config")
+            else:
+                log.info(f"Found {len(vlan_configs)} VLAN configuration(s) to apply")
+                vlan_errors = []
+                for idx, vlan_cfg in enumerate(vlan_configs, 1):
+                    bond_name = vlan_cfg.get('bond_name', f'bond#{idx}')
+                    try:
+                        log.info(f"Adding VLANs to bond {idx}/{len(vlan_configs)}: {bond_name}")
+                        self.network.add_vlan_to_bond(system_id, vlan_cfg)
+                        log.info(f"✓ Successfully added VLANs to bond: {bond_name}")
+                    except Exception as e:
+                        error_msg = f"Failed to add VLANs to bond {bond_name}: {e}"
+                        log.error(error_msg)
+                        vlan_errors.append(error_msg)
+                
+                # If any VLAN configurations failed, raise an error
+                if vlan_errors:
+                    raise Exception(f"VLAN configuration failed for {len(vlan_errors)} bond(s): " + "; ".join(vlan_errors))
+            log.info("")
+
+        # Step 8: Configure network bonds - after commission, before deploy (legacy)
         if 'set_network_bond' in actions:
             log.info("=" * 60)
             log.info("STEP: Set Network Bond(s)")

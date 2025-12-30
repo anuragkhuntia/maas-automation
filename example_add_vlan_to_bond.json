@@ -1,0 +1,39 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "add_vlan_to_bond"
+  ],
+  "machines": [
+    {
+      "hostname": "server01.example.com",
+      "vlan_configs": [
+        {
+          "bond_name": "bond0",
+          "vlan_ids": 100
+        }
+      ]
+    }
+  ],
+  "_workflow_explanation": {
+    "description": "Add VLAN interface(s) to an existing bond",
+    "step_1": "add_vlan_to_bond: Creates VLAN interface(s) on the specified bond",
+    "note": "The bond must already exist. Use 'create_bond' action first if needed"
+  },
+  "_parameters": {
+    "vlan_configs": {
+      "bond_name": "Name of the existing bond (e.g., 'bond0')",
+      "vlan_ids": "Single VLAN ID (int) or list of VLAN IDs [int, int, ...]"
+    }
+  },
+  "_examples": {
+    "single_vlan": {
+      "bond_name": "bond0",
+      "vlan_ids": 100
+    },
+    "multiple_vlans": {
+      "bond_name": "bond0",
+      "vlan_ids": [100, 200, 300]
+    }
+  }
+}

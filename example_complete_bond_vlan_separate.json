@@ -1,0 +1,77 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "create_bond",
+    "add_vlan_to_bond",
+    "update_interface"
+  ],
+  "machines": [
+    {
+      "hostname": "server01.example.com",
+      "bonds": [
+        {
+          "name": "bond0",
+          "interfaces": ["eth0", "eth1"],
+          "mode": "802.3ad",
+          "mtu": 9000,
+          "lacp_rate": "fast",
+          "xmit_hash_policy": "layer3+4"
+        }
+      ],
+      "vlan_configs": [
+        {
+          "bond_name": "bond0",
+          "vlan_ids": [100, 200]
+        }
+      ],
+      "update_interfaces": [
+        {
+          "name": "bond0.100",
+          "vlan": 100,
+          "subnet": "Production_Network",
+          "ip_mode": "static",
+          "ip_address": "10.0.100.10",
+          "mtu": 9000
+        },
+        {
+          "name": "bond0.200",
+          "vlan": 200,
+          "subnet": "Storage_Network",
+          "ip_mode": "static",
+          "ip_address": "10.0.200.10",
+          "mtu": 9000
+        }
+      ]
+    }
+  ],
+  "_workflow_explanation": {
+    "description": "Complete workflow to create bond, add VLANs, and configure IP addresses",
+    "step_1": "create_bond: Creates a bond interface from physical interfaces",
+    "step_2": "add_vlan_to_bond: Adds VLAN interface(s) to the bond",
+    "step_3": "update_interface: Configures subnet and IP addresses for each VLAN interface",
+    "note": "The VLAN interface names are typically <bond_name>.<vlan_id> (e.g., bond0.100)"
+  },
+  "_parameters": {
+    "bonds": {
+      "name": "Bond interface name",
+      "interfaces": "List of interface names to bond",
+      "mode": "Bond mode (default: '802.3ad')",
+      "mtu": "MTU size (default: 1500)",
+      "lacp_rate": "LACP rate for 802.3ad (default: 'fast')",
+      "xmit_hash_policy": "Hash policy for 802.3ad (default: 'layer3+4')"
+    },
+    "vlan_configs": {
+      "bond_name": "Name of the bond to add VLANs to",
+      "vlan_ids": "Single VLAN ID or list of VLAN IDs"
+    },
+    "update_interfaces": {
+      "name": "VLAN interface name (e.g., 'bond0.100')",
+      "vlan": "VLAN ID to connect to",
+      "subnet": "Subnet name or CIDR",
+      "ip_mode": "IP assignment mode: 'static', 'dhcp', or 'automatic'",
+      "ip_address": "Static IP address (required when ip_mode='static')",
+      "mtu": "MTU size (optional)"
+    }
+  }
+}

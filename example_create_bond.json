@@ -1,0 +1,58 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "create_bond"
+  ],
+  "machines": [
+    {
+      "hostname": "server01.example.com",
+      "bonds": [
+        {
+          "name": "bond0",
+          "interfaces": ["eth0", "eth1"],
+          "mode": "802.3ad",
+          "mtu": 9000,
+          "lacp_rate": "fast",
+          "xmit_hash_policy": "layer3+4"
+        }
+      ]
+    }
+  ],
+  "_workflow_explanation": {
+    "description": "Create a bond from specified interfaces without VLAN configuration",
+    "step_1": "create_bond: Creates a bond interface from the specified physical interfaces",
+    "note": "This action only creates the bond. Use 'add_vlan_to_bond' to add VLANs afterwards"
+  },
+  "_parameters": {
+    "bonds": {
+      "name": "Bond interface name (e.g., 'bond0', 'bond1')",
+      "interfaces": "List of interface names to bond together (e.g., ['eth0', 'eth1'])",
+      "mode": "Bond mode: '802.3ad', 'active-backup', 'balance-rr', etc. (default: '802.3ad')",
+      "mtu": "Maximum transmission unit size (default: 1500)",
+      "lacp_rate": "LACP rate for 802.3ad: 'fast' or 'slow' (default: 'fast')",
+      "xmit_hash_policy": "Transmit hash policy for 802.3ad (default: 'layer3+4')"
+    }
+  },
+  "_examples": {
+    "simple_bond": {
+      "name": "bond0",
+      "interfaces": ["eth0", "eth1"],
+      "mode": "802.3ad"
+    },
+    "high_performance_bond": {
+      "name": "bond1",
+      "interfaces": ["eth2", "eth3"],
+      "mode": "802.3ad",
+      "mtu": 9000,
+      "lacp_rate": "fast",
+      "xmit_hash_policy": "layer3+4"
+    },
+    "active_backup_bond": {
+      "name": "bond2",
+      "interfaces": ["eth4", "eth5"],
+      "mode": "active-backup",
+      "mtu": 1500
+    }
+  }
+}
