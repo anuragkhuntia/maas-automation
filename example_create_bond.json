@@ -47,7 +47,8 @@
     "auto_discovery_mode": {
       "name": "bond0",
       "vlan_id": 100,
-      "mode": "802.3ad"
+      "mode": "802.3ad",
+      "ip_mode": "dynamic"
     },
     "high_performance_bond": {
       "name": "bond1",

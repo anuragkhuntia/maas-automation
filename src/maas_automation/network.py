@@ -1026,6 +1026,8 @@ class NetworkManager:
                 - mtu: MTU size (optional, default: 1500)
                 - lacp_rate: "fast" or "slow" (optional, default: "fast" for 802.3ad)
                 - xmit_hash_policy: Hash policy (optional, default: "layer3+4" for 802.3ad)
+                - ip_mode: IP assignment mode: "auto", "static", "dynamic" (optional, default: "auto")
+                - ip_address: Static IP address if ip_mode is "static" (optional)
         
         Returns:
             Created bond interface details
@@ -1052,6 +1054,8 @@ class NetworkManager:
         vlan_id = bond_config.get("vlan_id")
         bond_mode = bond_config.get("mode", "802.3ad")
         mtu = bond_config.get("mtu", 1500)
+        ip_mode = bond_config.get("ip_mode", "auto").lower()
+        ip_address = bond_config.get("ip_address")
         
         if not bond_name:
             raise ValueError("Bond config must have 'name'")
@@ -1135,12 +1139,17 @@ class NetworkManager:
                     subnet = self.find_subnet_by_vlan(vlan_id)
                     if subnet:
                         log.info(f"✓ Found subnet: {subnet.get('cidr')} (ID: {subnet['id']})")
-                        log.info(f"  Linking bond to subnet...")
+                        log.info(f"  Linking bond to subnet with mode: {ip_mode.upper()}")
                         
                         link_payload = {
-                            "mode": "AUTO",
+                            "mode": ip_mode.upper(),
                             "subnet": subnet["id"]
                         }
+                        
+                        # Add static IP if specified
+                        if ip_mode == "static" and ip_address:
+                            link_payload["ip_address"] = ip_address
+                            log.info(f"  Static IP address: {ip_address}")
                         
                         retry(
                             lambda: self.client.request(
@@ -1152,7 +1161,7 @@ class NetworkManager:
                             retries=self.max_retries,
                             delay=2.0
                         )
-                        log.info(f"  ✓ Linked bond to subnet {subnet.get('cidr')}")
+                        log.info(f"  ✓ Linked bond to subnet {subnet.get('cidr')} (mode: {ip_mode.upper()})")
                     else:
                         log.info(f"  ⚠ No subnet found for VLAN {vlan_id}, skipping subnet configuration")
                 except Exception as subnet_error:
@@ -1180,6 +1189,8 @@ class NetworkManager:
             vlan_config: VLAN configuration with keys:
                 - bond_name: Name of the bond to add VLAN to (e.g., "bond0")
                 - vlan_ids: Single VLAN ID (int) or list of VLAN IDs [int, int, ...]
+                - ip_mode: IP assignment mode: "auto", "static", "dynamic" (optional, default: "auto")
+                - ip_address: Static IP address if ip_mode is "static" (optional)
         
         Returns:
             List of created VLAN interface details
@@ -1187,20 +1198,25 @@ class NetworkManager:
         Note:
             Automatically finds and links each VLAN interface to its subnet
         
-        Example config (single VLAN):
+        Example config (single VLAN with dynamic IP):
         {
             "bond_name": "bond0",
-            "vlan_ids": 100
+            "vlan_ids": 100,
+            "ip_mode": "dynamic"
         }
         
-        Example config (multiple VLANs with auto-subnet):
+        Example config (multiple VLANs with static IP):
         {
             "bond_name": "bond0",
-            "vlan_ids": [100, 200, 300]
+            "vlan_ids": [100, 200, 300],
+            "ip_mode": "static",
+            "ip_address": "10.0.100.10"
         }
         """
         bond_name = vlan_config.get("bond_name")
         vlan_id_config = vlan_config.get("vlan_ids")
+        ip_mode = vlan_config.get("ip_mode", "auto").lower()
+        ip_address = vlan_config.get("ip_address")
         
         if not bond_name:
             raise ValueError("VLAN config must have 'bond_name'")
@@ -1302,12 +1318,17 @@ class NetworkManager:
                     subnet = self.find_subnet_by_vlan(vlan_tag)
                     if subnet:
                         log.info(f"  ✓ Found subnet: {subnet.get('cidr')} (ID: {subnet['id']})")
-                        log.info(f"    Linking VLAN interface to subnet...")
+                        log.info(f"    Linking VLAN interface to subnet with mode: {ip_mode.upper()}")
                         
                         link_payload = {
-                            "mode": "AUTO",
+                            "mode": ip_mode.upper(),
                             "subnet": subnet["id"]
                         }
+                        
+                        # Add static IP if specified
+                        if ip_mode == "static" and ip_address:
+                            link_payload["ip_address"] = ip_address
+                            log.info(f"    Static IP address: {ip_address}")
                         
                         retry(
                             lambda: self.client.request(
@@ -1319,7 +1340,7 @@ class NetworkManager:
                             retries=self.max_retries,
                             delay=2.0
                         )
-                        log.info(f"    ✓ Linked VLAN interface to subnet {subnet.get('cidr')}")
+                        log.info(f"    ✓ Linked VLAN interface to subnet {subnet.get('cidr')} (mode: {ip_mode.upper()})")
                     else:
                         log.info(f"  ⚠ No subnet found for VLAN {vlan_tag}, skipping subnet configuration")
                 except Exception as subnet_error:

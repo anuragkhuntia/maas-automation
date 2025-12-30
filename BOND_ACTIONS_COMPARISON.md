@@ -36,7 +36,7 @@ There are three actions for creating and managing bonds in MAAS:
 }
 ```
 
-**Example (Auto-discovery mode):**
+**Example (Auto-discovery mode with dynamic IP):**
 ```json
 {
   "actions": ["create_bond"],
@@ -45,7 +45,8 @@ There are three actions for creating and managing bonds in MAAS:
     "bonds": [{
       "name": "bond0",
       "vlan_id": 100,
-      "mode": "802.3ad"
+      "mode": "802.3ad",
+      "ip_mode": "dynamic"
     }]
   }]
 }
@@ -75,7 +76,8 @@ There are three actions for creating and managing bonds in MAAS:
     "hostname": "server01",
     "vlan_configs": [{
       "bond_name": "bond0",
-      "vlan_ids": [100, 200, 300]
+      "vlan_ids": [100, 200, 300],
+      "ip_mode": "dynamic"
     }]
   }]
 }
@@ -125,11 +127,13 @@ There are three actions for creating and managing bonds in MAAS:
     "bonds": [{
       "name": "bond0",
       "vlan_id": 100,           // Auto-discover interfaces with VLAN 100
-      "mode": "802.3ad"
+      "mode": "802.3ad",
+      "ip_mode": "dynamic"
     }],
     "vlan_configs": [{
       "bond_name": "bond0",
-      "vlan_ids": [100, 200, 300]  // Add VLAN interfaces
+      "vlan_ids": [100, 200, 300],  // Add VLAN interfaces
+      "ip_mode": "dynamic"
     }]
   }]
 }
@@ -141,6 +145,31 @@ There are three actions for creating and managing bonds in MAAS:
 3. Easier troubleshooting
 4. More flexible
 5. Better logging at each step
+
+---
+
+## IP Assignment Modes
+
+When using `ip_mode` parameter for subnet configuration:
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `auto` | Automatic (default) | Let MAAS decide the best method |
+| `dynamic` | DHCP | Interface gets IP from DHCP server |
+| `static` | Manual IP | Specify exact IP with `ip_address` parameter |
+
+**Example with static IP:**
+```json
+{
+  "bonds": [{
+    "name": "bond0",
+    "vlan_id": 100,
+    "mode": "802.3ad",
+    "ip_mode": "static",
+    "ip_address": "10.0.100.10"
+  }]
+}
+```
 
 ---
 

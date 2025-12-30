@@ -10,7 +10,8 @@
       "vlan_configs": [
         {
           "bond_name": "bond0",
-          "vlan_ids": 100
+          "vlan_ids": 100,
+          "ip_mode": "dynamic"
         }
       ]
     }
@@ -24,17 +25,27 @@
   "_parameters": {
     "vlan_configs": {
       "bond_name": "Name of the existing bond (e.g., 'bond0')",
-      "vlan_ids": "Single VLAN ID (int) or list of VLAN IDs [int, int, ...]"
+      "vlan_ids": "Single VLAN ID (int) or list of VLAN IDs [int, int, ...]",
+      "ip_mode": "IP assignment: 'auto', 'dynamic', or 'static' (optional, default: 'auto')",
+      "ip_address": "Static IP address if ip_mode is 'static' (optional)"
     }
   },
   "_examples": {
     "single_vlan": {
       "bond_name": "bond0",
-      "vlan_ids": 100
+      "vlan_ids": 100,
+      "ip_mode": "dynamic"
     },
     "multiple_vlans": {
       "bond_name": "bond0",
-      "vlan_ids": [100, 200, 300]
+      "vlan_ids": [100, 200, 300],
+      "ip_mode": "auto"
+    },
+    "static_ip": {
+      "bond_name": "bond0",
+      "vlan_ids": 100,
+      "ip_mode": "static",
+      "ip_address": "10.0.100.10"
     }
   }
 }
