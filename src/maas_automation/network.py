@@ -75,6 +75,22 @@ class NetworkManager:
             log.error(f"Failed to search for VLAN VID {vlan_vid}: {e}")
             return None
 
+    def find_subnet_by_vlan(self, vlan_id: int) -> Optional[Dict]:
+        """Find a subnet that belongs to a specific VLAN"""
+        try:
+            subnets = self.client.request("GET", "subnets/")
+            for subnet in subnets:
+                subnet_vlan = subnet.get("vlan")
+                if subnet_vlan and isinstance(subnet_vlan, dict):
+                    if subnet_vlan.get("vid") == vlan_id:
+                        log.debug(f"Found subnet for VLAN {vlan_id}: {subnet.get('cidr')} (ID: {subnet['id']})")
+                        return subnet
+            log.debug(f"No subnet found for VLAN {vlan_id}")
+            return None
+        except Exception as e:
+            log.error(f"Failed to search for subnet with VLAN {vlan_id}: {e}")
+            return None
+
     def _find_interfaces_by_vlan(self, system_id: str, vlan_id: int) -> List[str]:
         """
         Find physical interfaces that have access to a specific VLAN.
@@ -994,6 +1010,8 @@ class NetworkManager:
     def create_bond_simple(self, system_id: str, bond_config: Dict) -> Dict:
         """
         Create a network bond from specified interfaces or auto-discover by VLAN.
+        Automatically configures subnet if VLAN ID is provided.
+        
         Supports two modes:
         1. Explicit mode: Provide 'interfaces' list
         2. Auto-discovery mode: Provide 'vlan_id' to find interfaces automatically
@@ -1012,6 +1030,9 @@ class NetworkManager:
         Returns:
             Created bond interface details
         
+        Note:
+            If vlan_id is provided, automatically finds and links to subnet for that VLAN
+        
         Example config (explicit):
         {
             "name": "bond0",
@@ -1019,7 +1040,7 @@ class NetworkManager:
             "mode": "802.3ad"
         }
         
-        Example config (auto-discovery):
+        Example config (auto-discovery with subnet):
         {
             "name": "bond0",
             "vlan_id": 100,
@@ -1106,6 +1127,38 @@ class NetworkManager:
             log.info(f"  - Bond ID: {bond['id']}")
             log.info(f"  - Bond Name: {bond.get('name')}")
             log.info(f"  - Parent Interfaces: {', '.join(interface_names)}")
+            
+            # Auto-configure subnet if VLAN ID was provided
+            if vlan_id is not None:
+                log.info(f"\nAuto-configuring subnet for VLAN {vlan_id}...")
+                try:
+                    subnet = self.find_subnet_by_vlan(vlan_id)
+                    if subnet:
+                        log.info(f"✓ Found subnet: {subnet.get('cidr')} (ID: {subnet['id']})")
+                        log.info(f"  Linking bond to subnet...")
+                        
+                        link_payload = {
+                            "mode": "AUTO",
+                            "subnet": subnet["id"]
+                        }
+                        
+                        retry(
+                            lambda: self.client.request(
+                                "POST",
+                                f"nodes/{system_id}/interfaces/{bond['id']}",
+                                op="link_subnet",
+                                data=link_payload
+                            ),
+                            retries=self.max_retries,
+                            delay=2.0
+                        )
+                        log.info(f"  ✓ Linked bond to subnet {subnet.get('cidr')}")
+                    else:
+                        log.info(f"  ⚠ No subnet found for VLAN {vlan_id}, skipping subnet configuration")
+                except Exception as subnet_error:
+                    log.warning(f"  Failed to configure subnet: {subnet_error}")
+                    log.warning(f"  Bond created successfully but subnet was not configured")
+            
             return bond
         except Exception as e:
             error_msg = str(e)
@@ -1120,6 +1173,7 @@ class NetworkManager:
     def add_vlan_to_bond(self, system_id: str, vlan_config: Dict) -> List[Dict]:
         """
         Add VLAN interface(s) to an existing bond.
+        Automatically configures subnet for each VLAN.
         
         Args:
             system_id: Machine system ID
@@ -1130,13 +1184,16 @@ class NetworkManager:
         Returns:
             List of created VLAN interface details
         
+        Note:
+            Automatically finds and links each VLAN interface to its subnet
+        
         Example config (single VLAN):
         {
             "bond_name": "bond0",
             "vlan_ids": 100
         }
         
-        Example config (multiple VLANs):
+        Example config (multiple VLANs with auto-subnet):
         {
             "bond_name": "bond0",
             "vlan_ids": [100, 200, 300]
@@ -1238,6 +1295,36 @@ class NetworkManager:
                 log.info(f"  - VLAN Interface ID: {vlan_iface.get('id')}")
                 log.info(f"  - VLAN Interface Name: {vlan_iface.get('name')}")
                 log.info(f"  - Expected name format: {bond_name}.{vlan_tag}")
+                
+                # Auto-configure subnet for this VLAN
+                log.info(f"\nStep 3: Auto-configuring subnet for VLAN {vlan_tag}...")
+                try:
+                    subnet = self.find_subnet_by_vlan(vlan_tag)
+                    if subnet:
+                        log.info(f"  ✓ Found subnet: {subnet.get('cidr')} (ID: {subnet['id']})")
+                        log.info(f"    Linking VLAN interface to subnet...")
+                        
+                        link_payload = {
+                            "mode": "AUTO",
+                            "subnet": subnet["id"]
+                        }
+                        
+                        retry(
+                            lambda: self.client.request(
+                                "POST",
+                                f"nodes/{system_id}/interfaces/{vlan_iface['id']}",
+                                op="link_subnet",
+                                data=link_payload
+                            ),
+                            retries=self.max_retries,
+                            delay=2.0
+                        )
+                        log.info(f"    ✓ Linked VLAN interface to subnet {subnet.get('cidr')}")
+                    else:
+                        log.info(f"  ⚠ No subnet found for VLAN {vlan_tag}, skipping subnet configuration")
+                except Exception as subnet_error:
+                    log.warning(f"  Failed to configure subnet: {subnet_error}")
+                    log.warning(f"  VLAN interface created but subnet was not configured")
                 
                 created_vlan_interfaces.append(vlan_iface)
                 

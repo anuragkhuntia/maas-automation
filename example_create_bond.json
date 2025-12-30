@@ -24,7 +24,8 @@
     "step_1": "create_bond: Creates a bond interface from physical interfaces",
     "note": "Supports two modes: 1) Explicit interface names, 2) Auto-discover by VLAN ID",
     "mode_1_explicit": "Provide 'interfaces' list (e.g., ['eth0', 'eth1'])",
-    "mode_2_auto": "Provide 'vlan_id' to automatically find interfaces with that VLAN"
+    "mode_2_auto": "Provide 'vlan_id' to automatically find interfaces with that VLAN",
+    "subnet_auto_config": "When vlan_id is used, automatically links bond to subnet for that VLAN"
   },
   "_parameters": {
     "bonds": {

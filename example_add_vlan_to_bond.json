@@ -18,7 +18,8 @@
   "_workflow_explanation": {
     "description": "Add VLAN interface(s) to an existing bond",
     "step_1": "add_vlan_to_bond: Creates VLAN interface(s) on the specified bond",
-    "note": "The bond must already exist. Use 'create_bond' action first if needed"
+    "note": "The bond must already exist. Use 'create_bond' action first if needed",
+    "subnet_auto_config": "Automatically links each VLAN interface to its subnet"
   },
   "_parameters": {
     "vlan_configs": {

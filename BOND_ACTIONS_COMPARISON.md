@@ -10,6 +10,7 @@ There are three actions for creating and managing bonds in MAAS:
 **Key Features:**
 - ✅ Supports **explicit interface names** (`interfaces` list)
 - ✅ Supports **auto-discovery by VLAN** (`vlan_id`)
+- ✅ **Auto-configures subnet** when using `vlan_id` mode
 - ✅ Only creates the bond (no VLAN interfaces on top)
 - ✅ Full control over bond parameters
 - ✅ Clean separation of concerns
@@ -58,6 +59,7 @@ There are three actions for creating and managing bonds in MAAS:
 **Key Features:**
 - ✅ Bond must already exist
 - ✅ Creates VLAN interfaces (e.g., bond0.100, bond0.200)
+- ✅ **Auto-configures subnet** for each VLAN interface
 - ✅ Supports single or multiple VLANs
 - ✅ Clean, explicit approach
 
@@ -135,9 +137,10 @@ There are three actions for creating and managing bonds in MAAS:
 
 **Benefits:**
 1. Clear separation: bond creation vs VLAN configuration
-2. Easier troubleshooting
-3. More flexible
-4. Better logging at each step
+2. **Automatic subnet linking** for each VLAN
+3. Easier troubleshooting
+4. More flexible
+5. Better logging at each step
 
 ---
 

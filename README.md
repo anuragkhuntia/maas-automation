@@ -143,6 +143,7 @@ Actions run in the order specified:
 **`create_bond`**: Creates a bond from physical interfaces - supports explicit and auto-discovery modes
 - **Explicit mode**: Specify exact interface names (e.g., ["eth0", "eth1"])
 - **Auto-discovery mode**: Provide VLAN ID to auto-find interfaces with that VLAN
+- **✨ Auto-configures subnet** when using VLAN ID mode
 - Configure bond mode (802.3ad, active-backup, etc.)
 - Set MTU, LACP rate, and hash policy
 - See example: `example_create_bond.json`
@@ -150,9 +151,12 @@ Actions run in the order specified:
 
 **`add_vlan_to_bond`**: Adds VLAN interface(s) to an existing bond
 - Specify bond name and VLAN ID(s) to add
+- **✨ Auto-configures subnet** for each VLAN interface
 - Supports single VLAN or multiple VLANs
 - Bond must already exist (use `create_bond` first)
 - See example: `example_add_vlan_to_bond.json`
+
+**Complete workflow**: See `example_bond_vlan_with_subnet.json` for bond + multi-VLAN + auto-subnet
 
 **`set_network_bond`**: Creates network bonds from interfaces with matching VLAN IDs (LEGACY)
 - Automatically finds physical interfaces with specified VLAN

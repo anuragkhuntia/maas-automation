@@ -1,0 +1,54 @@
+{
+  "maas_api_url": "http://your-maas-server:5240/MAAS",
+  "maas_api_key": "consumer_key:token_key:secret",
+  "actions": [
+    "create_bond",
+    "add_vlan_to_bond"
+  ],
+  "machines": [
+    {
+      "hostname": "server01.example.com",
+      "bonds": [
+        {
+          "name": "bond0",
+          "vlan_id": 100,
+          "mode": "802.3ad",
+          "mtu": 9000
+        }
+      ],
+      "vlan_configs": [
+        {
+          "bond_name": "bond0",
+          "vlan_ids": [100, 200, 300]
+        }
+      ]
+    }
+  ],
+  "_workflow_explanation": {
+    "description": "Complete bond + VLAN workflow with automatic subnet configuration",
+    "step_1": "create_bond: Auto-discovers interfaces with VLAN 100",
+    "step_1a": "Automatically links bond0 to subnet for VLAN 100",
+    "step_2": "add_vlan_to_bond: Creates bond0.100, bond0.200, bond0.300",
+    "step_2a": "Automatically links each VLAN interface to its respective subnet",
+    "result": "Bond with multiple VLANs, all properly configured with subnets"
+  },
+  "_what_happens": {
+    "discovery": "Finds all physical interfaces on the machine with VLAN 100 (e.g., eth0, eth1)",
+    "bond_creation": "Creates bond0 from discovered interfaces",
+    "bond_subnet": "Automatically finds subnet for VLAN 100 and links bond0 to it",
+    "vlan_interfaces": "Creates bond0.100, bond0.200, bond0.300 on top of bond0",
+    "vlan_subnets": "Automatically finds subnets for VLAN 100, 200, 300 and links each interface"
+  },
+  "_requirements": {
+    "machine_state": "Machine must be in 'Ready' state (after commissioning, before deploy)",
+    "vlans_exist": "VLANs 100, 200, 300 must exist in MAAS",
+    "subnets_exist": "Subnets must be configured for each VLAN in MAAS",
+    "interfaces": "At least 2 physical interfaces must have access to VLAN 100"
+  },
+  "_notes": [
+    "Subnet linking is automatic - no manual configuration needed",
+    "If a subnet doesn't exist for a VLAN, that VLAN interface is created but not linked",
+    "IP mode defaults to 'AUTO' (automatic) for all subnet links",
+    "You can verify subnet configuration in MAAS web UI after running this"
+  ]
+}
