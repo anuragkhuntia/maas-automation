@@ -75,6 +75,56 @@ class NetworkManager:
             log.error(f"Failed to search for VLAN VID {vlan_vid}: {e}")
             return None
 
+    def _find_interfaces_by_vlan(self, system_id: str, vlan_id: int) -> List[str]:
+        """
+        Find physical interfaces that have access to a specific VLAN.
+        Returns list of interface names (not IDs).
+        """
+        interfaces = self.get_interfaces(system_id)
+        matching_interfaces = []
+        
+        log.debug(f"Scanning interfaces for VLAN {vlan_id}:")
+        for iface in interfaces:
+            if not iface or not isinstance(iface, dict):
+                continue
+                
+            iface_name = iface.get("name")
+            iface_type = iface.get("type")
+            
+            if not iface_name:
+                continue
+            
+            # Skip bond and bridge interfaces - we only want physical or VLAN interfaces
+            if iface_type in ["bond", "bridge"]:
+                log.debug(f"  - Skipping {iface_name} (type: {iface_type})")
+                continue
+            
+            # Check the interface's VLAN directly
+            iface_vlan = iface.get("vlan")
+            if iface_vlan and isinstance(iface_vlan, dict):
+                if iface_vlan.get("vid") == vlan_id:
+                    if iface_name not in matching_interfaces:
+                        matching_interfaces.append(iface_name)
+                        log.debug(f"  ✓ Found: {iface_name} (has VLAN {vlan_id})")
+                    continue
+            
+            # Check if interface has links to the VLAN (fallback)
+            links = iface.get("links", [])
+            if links and isinstance(links, list):
+                for link in links:
+                    if not link or not isinstance(link, dict):
+                        continue
+                    subnet = link.get("subnet")
+                    if subnet and isinstance(subnet, dict):
+                        vlan = subnet.get("vlan")
+                        if vlan and isinstance(vlan, dict) and vlan.get("vid") == vlan_id:
+                            if iface_name not in matching_interfaces:
+                                matching_interfaces.append(iface_name)
+                                log.debug(f"  ✓ Found: {iface_name} (VLAN {vlan_id} via subnet)")
+                            break
+        
+        return matching_interfaces
+
     def create_bond(self, system_id: str, bond_config: Dict) -> Dict:
         """
         Create a network bond from multiple interfaces.
@@ -943,14 +993,17 @@ class NetworkManager:
 
     def create_bond_simple(self, system_id: str, bond_config: Dict) -> Dict:
         """
-        Create a network bond from specified interfaces without VLAN logic.
-        This is a simpler version that just creates the bond interface.
+        Create a network bond from specified interfaces or auto-discover by VLAN.
+        Supports two modes:
+        1. Explicit mode: Provide 'interfaces' list
+        2. Auto-discovery mode: Provide 'vlan_id' to find interfaces automatically
         
         Args:
             system_id: Machine system ID
             bond_config: Bond configuration with keys:
                 - name: Bond name (e.g., "bond0")
-                - interfaces: List of interface names to bond (e.g., ["eth0", "eth1"])
+                - interfaces: List of interface names (e.g., ["eth0", "eth1"]) OR
+                - vlan_id: VLAN ID to auto-discover interfaces (e.g., 100)
                 - mode: Bond mode (e.g., "802.3ad", "active-backup", "balance-rr")
                 - mtu: MTU size (optional, default: 1500)
                 - lacp_rate: "fast" or "slow" (optional, default: "fast" for 802.3ad)
@@ -959,25 +1012,41 @@ class NetworkManager:
         Returns:
             Created bond interface details
         
-        Example config:
+        Example config (explicit):
         {
             "name": "bond0",
             "interfaces": ["eth0", "eth1"],
-            "mode": "802.3ad",
-            "mtu": 9000,
-            "lacp_rate": "fast",
-            "xmit_hash_policy": "layer3+4"
+            "mode": "802.3ad"
+        }
+        
+        Example config (auto-discovery):
+        {
+            "name": "bond0",
+            "vlan_id": 100,
+            "mode": "802.3ad"
         }
         """
         bond_name = bond_config.get("name")
         interface_names = bond_config.get("interfaces", [])
+        vlan_id = bond_config.get("vlan_id")
         bond_mode = bond_config.get("mode", "802.3ad")
         mtu = bond_config.get("mtu", 1500)
         
         if not bond_name:
             raise ValueError("Bond config must have 'name'")
+        
+        # Auto-discovery mode: find interfaces by VLAN ID
+        if vlan_id is not None and not interface_names:
+            log.info(f"Auto-discovery mode: Finding interfaces with VLAN {vlan_id}")
+            interface_names = self._find_interfaces_by_vlan(system_id, vlan_id)
+            log.info(f"  Found {len(interface_names)} interfaces: {', '.join(interface_names)}")
+        
+        # Validate we have enough interfaces
         if not interface_names or len(interface_names) < 2:
-            raise ValueError("Bond requires at least 2 interfaces")
+            if vlan_id:
+                raise ValueError(f"Found only {len(interface_names)} interface(s) with VLAN {vlan_id}. Need at least 2 interfaces to create a bond.")
+            else:
+                raise ValueError("Bond requires at least 2 interfaces")
         
         log.info(f"Creating bond '{bond_name}' with interfaces: {', '.join(interface_names)}")
         log.info(f"  - Mode: {bond_mode}")

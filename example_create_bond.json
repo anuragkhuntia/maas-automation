@@ -20,14 +20,17 @@
     }
   ],
   "_workflow_explanation": {
-    "description": "Create a bond from specified interfaces without VLAN configuration",
-    "step_1": "create_bond: Creates a bond interface from the specified physical interfaces",
-    "note": "This action only creates the bond. Use 'add_vlan_to_bond' to add VLANs afterwards"
+    "description": "Create a bond from specified interfaces or auto-discover by VLAN",
+    "step_1": "create_bond: Creates a bond interface from physical interfaces",
+    "note": "Supports two modes: 1) Explicit interface names, 2) Auto-discover by VLAN ID",
+    "mode_1_explicit": "Provide 'interfaces' list (e.g., ['eth0', 'eth1'])",
+    "mode_2_auto": "Provide 'vlan_id' to automatically find interfaces with that VLAN"
   },
   "_parameters": {
     "bonds": {
       "name": "Bond interface name (e.g., 'bond0', 'bond1')",
-      "interfaces": "List of interface names to bond together (e.g., ['eth0', 'eth1'])",
+      "interfaces": "List of interface names to bond (explicit mode) OR",
+      "vlan_id": "VLAN ID to auto-discover interfaces (auto mode)",
       "mode": "Bond mode: '802.3ad', 'active-backup', 'balance-rr', etc. (default: '802.3ad')",
       "mtu": "Maximum transmission unit size (default: 1500)",
       "lacp_rate": "LACP rate for 802.3ad: 'fast' or 'slow' (default: 'fast')",
@@ -35,9 +38,14 @@
     }
   },
   "_examples": {
-    "simple_bond": {
+    "explicit_mode": {
       "name": "bond0",
       "interfaces": ["eth0", "eth1"],
+      "mode": "802.3ad"
+    },
+    "auto_discovery_mode": {
+      "name": "bond0",
+      "vlan_id": 100,
       "mode": "802.3ad"
     },
     "high_performance_bond": {
