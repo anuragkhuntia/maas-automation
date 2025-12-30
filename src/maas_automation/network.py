@@ -591,20 +591,38 @@ class NetworkManager:
             created_vlan_interfaces = []
             
             for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
-                log.info(f"\nCreating VLAN interface for VLAN {vlan_tag} on bond '{bond_name}' ({vlan_idx}/{len(vlan_ids)})...")
+                log.info(f"\n{'='*60}")
+                log.info(f"Creating VLAN interface {vlan_idx}/{len(vlan_ids)} for VLAN {vlan_tag}")
+                log.info(f"{'='*60}")
                 try:
-                    # First, look up VLAN resource to get VLAN resource ID
-                    log.debug(f"Looking up VLAN resource for VID {vlan_tag}...")
+                    # First, look up VLAN resource to get VLAN details
+                    log.info(f"Step 1: Looking up VLAN resource for VID {vlan_tag}...")
                     vlans = self.client.request("GET", "vlans/")
+                    log.debug(f"Retrieved {len(vlans)} VLANs from MAAS")
+                    
                     target_vlan = None
                     for vlan in vlans:
-                        if vlan.get("vid") == vlan_tag:
+                        vlan_vid = vlan.get("vid")
+                        vlan_id = vlan.get("id")
+                        vlan_name = vlan.get("name", "N/A")
+                        vlan_fabric = vlan.get("fabric", "N/A")
+                        log.debug(f"  - VLAN: VID={vlan_vid}, ID={vlan_id}, Name={vlan_name}, Fabric={vlan_fabric}")
+                        
+                        if vlan_vid == vlan_tag:
                             target_vlan = vlan
-                            log.debug(f"Found VLAN resource: ID={vlan['id']}, VID={vlan_tag}, Name={vlan.get('name')}")
+                            log.info(f"✓ Found matching VLAN:")
+                            log.info(f"  - VID: {vlan_vid}")
+                            log.info(f"  - Resource ID: {vlan_id}")
+                            log.info(f"  - Name: {vlan_name}")
+                            log.info(f"  - Fabric: {vlan_fabric}")
+                            log.info(f"  - Resource URI: {vlan.get('resource_uri', 'N/A')}")
                             break
                     
                     if not target_vlan:
                         log.error(f"✗ VLAN with VID {vlan_tag} not found in MAAS")
+                        log.error(f"  Available VLANs:")
+                        for vlan in vlans[:10]:  # Show first 10
+                            log.error(f"    - VID {vlan.get('vid')}: {vlan.get('name')} (ID: {vlan.get('id')})")
                         log.error(f"  Please create VLAN {vlan_tag} in MAAS first via web UI")
                         if vlan_idx == 1:
                             raise ValueError(f"VLAN {vlan_tag} not found in MAAS")
@@ -613,13 +631,20 @@ class NetworkManager:
                             continue
                     
                     # Create VLAN interface using parent bond ID and VLAN resource ID
-                    # API expects parent and vlan as strings
+                    log.info(f"\nStep 2: Creating VLAN interface...")
+                    log.info(f"  - Bond ID: {bond['id']}")
+                    log.info(f"  - Bond Name: {bond_name}")
+                    log.info(f"  - VLAN VID: {vlan_tag}")
+                    log.info(f"  - VLAN Resource ID: {target_vlan['id']}")
+                    
+                    # Try with VLAN resource ID
                     vlan_payload = [
                         ("parent", str(bond['id'])),
-                        ("vlan", str(target_vlan['id']))  # Use VLAN resource ID (e.g., 5006), not VID
+                        ("vlan", str(target_vlan['id']))
                     ]
                     
-                    log.debug(f"Creating VLAN interface with payload: {vlan_payload}")
+                    log.info(f"  - API Endpoint: POST /MAAS/api/2.0/nodes/{system_id}/interfaces/?op=create_vlan")
+                    log.info(f"  - Payload: {vlan_payload}")
                     
                     vlan_iface = retry(
                         lambda: self.client.request(
@@ -632,7 +657,7 @@ class NetworkManager:
                         delay=2.0
                     )
                     
-                    log.info(f"✓ Successfully created VLAN interface for VLAN {vlan_tag}")
+                    log.info(f"\n✓ Successfully created VLAN interface!")
                     log.info(f"  - VLAN Interface ID: {vlan_iface.get('id')}")
                     log.info(f"  - VLAN Interface Name: {vlan_iface.get('name')}")
                     log.info(f"  - Expected name format: {bond_name}.{vlan_tag}")
@@ -640,10 +665,24 @@ class NetworkManager:
                     created_vlan_interfaces.append(vlan_iface)
                     
                 except Exception as vlan_error:
-                    log.error(f"✗ Failed to create VLAN interface for VLAN {vlan_tag}: {vlan_error}")
+                    log.error(f"\n✗ Failed to create VLAN interface for VLAN {vlan_tag}")
+                    log.error(f"  Error type: {type(vlan_error).__name__}")
+                    log.error(f"  Error message: {str(vlan_error)}")
+                    
+                    # Try to extract more details from error
+                    if hasattr(vlan_error, 'response'):
+                        log.error(f"  HTTP Status: {vlan_error.response.status_code if hasattr(vlan_error.response, 'status_code') else 'N/A'}")
+                        try:
+                            error_detail = vlan_error.response.json() if hasattr(vlan_error.response, 'json') else str(vlan_error.response.text)
+                            log.error(f"  Response: {error_detail}")
+                        except:
+                            pass
+                    
                     if vlan_idx == 1:
                         # If first VLAN fails, this is critical
-                        log.error(f"First VLAN creation failed - this is critical")
+                        log.error(f"\n{'='*60}")
+                        log.error(f"CRITICAL: First VLAN creation failed")
+                        log.error(f"{'='*60}")
                         raise
                     else:
                         # For subsequent VLANs, log but continue
