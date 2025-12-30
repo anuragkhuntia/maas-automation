@@ -593,11 +593,30 @@ class NetworkManager:
             for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
                 log.info(f"\nCreating VLAN interface for VLAN {vlan_tag} on bond '{bond_name}' ({vlan_idx}/{len(vlan_ids)})...")
                 try:
-                    # Create VLAN interface using parent bond ID and VLAN VID
+                    # First, look up VLAN resource to get VLAN resource ID
+                    log.debug(f"Looking up VLAN resource for VID {vlan_tag}...")
+                    vlans = self.client.request("GET", "vlans/")
+                    target_vlan = None
+                    for vlan in vlans:
+                        if vlan.get("vid") == vlan_tag:
+                            target_vlan = vlan
+                            log.debug(f"Found VLAN resource: ID={vlan['id']}, VID={vlan_tag}, Name={vlan.get('name')}")
+                            break
+                    
+                    if not target_vlan:
+                        log.error(f"✗ VLAN with VID {vlan_tag} not found in MAAS")
+                        log.error(f"  Please create VLAN {vlan_tag} in MAAS first via web UI")
+                        if vlan_idx == 1:
+                            raise ValueError(f"VLAN {vlan_tag} not found in MAAS")
+                        else:
+                            log.warning(f"Skipping VLAN {vlan_tag} and continuing...")
+                            continue
+                    
+                    # Create VLAN interface using parent bond ID and VLAN resource ID
                     # API expects parent and vlan as strings
                     vlan_payload = [
                         ("parent", str(bond['id'])),
-                        ("vlan", str(vlan_tag))  # Pass VID directly as string
+                        ("vlan", str(target_vlan['id']))  # Use VLAN resource ID (e.g., 5006), not VID
                     ]
                     
                     log.debug(f"Creating VLAN interface with payload: {vlan_payload}")
@@ -616,6 +635,7 @@ class NetworkManager:
                     log.info(f"✓ Successfully created VLAN interface for VLAN {vlan_tag}")
                     log.info(f"  - VLAN Interface ID: {vlan_iface.get('id')}")
                     log.info(f"  - VLAN Interface Name: {vlan_iface.get('name')}")
+                    log.info(f"  - Expected name format: {bond_name}.{vlan_tag}")
                     
                     created_vlan_interfaces.append(vlan_iface)
                     
@@ -624,7 +644,6 @@ class NetworkManager:
                     if vlan_idx == 1:
                         # If first VLAN fails, this is critical
                         log.error(f"First VLAN creation failed - this is critical")
-                        log.error(f"Make sure VLAN {vlan_tag} exists in MAAS")
                         raise
                     else:
                         # For subsequent VLANs, log but continue
@@ -637,7 +656,9 @@ class NetworkManager:
                 for vlan_iface in created_vlan_interfaces:
                     vlan_vid = vlan_iface.get('vlan', {}).get('vid', 'N/A') if isinstance(vlan_iface.get('vlan'), dict) else 'N/A'
                     log.info(f"  - {vlan_iface.get('name')} (VLAN {vlan_vid})")
-                log.info(f"\n💡 Next step: Use 'update_interface' action to configure subnet/IP for each VLAN interface")
+                log.info(f"\n💡 Next step: Use 'update_interface' action with these names:")
+                for vlan_iface in created_vlan_interfaces:
+                    log.info(f"     - name: \"{vlan_iface.get('name')}\"")
                 log.info(f"{'='*60}")
                 return created_vlan_interfaces[-1]  # Return last created interface
             else:
