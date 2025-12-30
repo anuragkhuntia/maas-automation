@@ -587,18 +587,17 @@ class NetworkManager:
                 log.info(f"⚠ Subnet '{subnet_name}' specified but no ip_mode provided - skipping subnet configuration")
                 log.info(f"  To configure subnet, add 'ip_mode' field with value: 'static', 'dynamic', or 'automatic'")
             
-            # Tag the bond with VLAN ID(s)
-            # If multiple VLANs, create VLAN interface for each
+            # For multi-VLAN bonds, create VLAN interface for each VLAN ID
             created_vlan_interfaces = []
-            last_vlan_interface = None
             
             for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
                 log.info(f"\nCreating VLAN interface for VLAN {vlan_tag} on bond '{bond_name}' ({vlan_idx}/{len(vlan_ids)})...")
                 try:
-                    # Use the create_vlan operation which just needs parent and VLAN ID
+                    # Create VLAN interface using parent bond ID and VLAN VID
+                    # API expects parent and vlan as strings
                     vlan_payload = [
-                        ("parents", str(bond['id'])),
-                        ("vlan", str(vlan_tag))
+                        ("parent", str(bond['id'])),
+                        ("vlan", str(vlan_tag))  # Pass VID directly as string
                     ]
                     
                     log.debug(f"Creating VLAN interface with payload: {vlan_payload}")
@@ -619,13 +618,13 @@ class NetworkManager:
                     log.info(f"  - VLAN Interface Name: {vlan_iface.get('name')}")
                     
                     created_vlan_interfaces.append(vlan_iface)
-                    last_vlan_interface = vlan_iface
                     
                 except Exception as vlan_error:
                     log.error(f"✗ Failed to create VLAN interface for VLAN {vlan_tag}: {vlan_error}")
                     if vlan_idx == 1:
                         # If first VLAN fails, this is critical
                         log.error(f"First VLAN creation failed - this is critical")
+                        log.error(f"Make sure VLAN {vlan_tag} exists in MAAS")
                         raise
                     else:
                         # For subsequent VLANs, log but continue
@@ -633,12 +632,14 @@ class NetworkManager:
             
             # Summary
             if len(created_vlan_interfaces) > 0:
-                log.info(f"\n✓ Created {len(created_vlan_interfaces)} VLAN interface(s) on bond '{bond_name}':")
+                log.info(f"\n{'='*60}")
+                log.info(f"✓ Created {len(created_vlan_interfaces)} VLAN interface(s) on bond '{bond_name}':")
                 for vlan_iface in created_vlan_interfaces:
                     vlan_vid = vlan_iface.get('vlan', {}).get('vid', 'N/A') if isinstance(vlan_iface.get('vlan'), dict) else 'N/A'
                     log.info(f"  - {vlan_iface.get('name')} (VLAN {vlan_vid})")
                 log.info(f"\n💡 Next step: Use 'update_interface' action to configure subnet/IP for each VLAN interface")
-                return last_vlan_interface
+                log.info(f"{'='*60}")
+                return created_vlan_interfaces[-1]  # Return last created interface
             else:
                 # No VLAN interfaces created, return the bond
                 log.info(f"\n✓ Bond '{bond_name}' created (no VLAN interfaces)")
