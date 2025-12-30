@@ -622,44 +622,6 @@ class NetworkManager:
             else:
                 # No VLAN interfaces created, return the bond
                 return bond
-                
-            except Exception as vlan_error:
-                log.error(f"✗ Failed to tag bond with VLAN: {vlan_error}")
-                log.warning(f"Bond '{bond_name}' created but VLAN tagging failed")
-                
-                # Fallback: Link subnet to the bond itself if VLAN tagging failed
-                if subnet_name and ip_mode and target_subnet:
-                    log.info(f"\nFalling back to linking bond directly to subnet '{subnet_name}'...")
-                    try:
-                        link_payload = {
-                            "mode": ip_mode.upper(),
-                            "subnet": target_subnet["id"]
-                        }
-                        
-                        if ip_mode == "static" and ip_address:
-                            link_payload["ip_address"] = ip_address
-                        
-                        retry(
-                            lambda: self.client.request(
-                                "POST",
-                                f"nodes/{system_id}/interfaces/{bond['id']}",
-                                op="link_subnet",
-                                data=link_payload
-                            ),
-                            retries=self.max_retries,
-                            delay=2.0
-                        )
-                        log.info(f"✓ Linked bond '{bond_name}' to subnet '{subnet_name}' (without VLAN tag)")
-                        log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
-                        log.info(f"  - IP Mode: {ip_mode}")
-                        if ip_mode == "static" and ip_address:
-                            log.info(f"  - Static IP: {ip_address}")
-                        
-                    except Exception as subnet_error:
-                        log.error(f"✗ Failed to link subnet to bond: {subnet_error}")
-                        log.warning(f"Bond '{bond_name}' created but subnet linking failed")
-                
-                return bond
             
         except Exception as e:
             log.error("=" * 60)
