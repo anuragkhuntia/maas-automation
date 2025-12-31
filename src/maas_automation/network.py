@@ -638,61 +638,61 @@ class NetworkManager:
         ip_mode = bond_config.get("ip_mode")
         ip_address = bond_config.get("ip_address")
         target_subnet = None
-            
-            if subnet_name and ip_mode:
-                log.info(f"\nLooking up subnet '{subnet_name}' for bond configuration...")
-                try:
-                    # Find subnet by name
-                    target_subnet = self.find_subnet_by_name(subnet_name)
+        
+        if subnet_name and ip_mode:
+            log.info(f"\nLooking up subnet '{subnet_name}' for bond configuration...")
+            try:
+                # Find subnet by name
+                target_subnet = self.find_subnet_by_name(subnet_name)
+                
+                if not target_subnet:
+                    log.error(f"✗ Subnet '{subnet_name}' not found in MAAS")
+                    log.warning(f"Bond '{bond_name}' created but subnet will not be configured")
+                else:
+                    log.info(f"✓ Found subnet '{subnet_name}' (CIDR: {target_subnet.get('cidr')})")
                     
-                    if not target_subnet:
-                        log.error(f"✗ Subnet '{subnet_name}' not found in MAAS")
-                        log.warning(f"Bond '{bond_name}' created but subnet will not be configured")
-                    else:
-                        log.info(f"✓ Found subnet '{subnet_name}' (CIDR: {target_subnet.get('cidr')})")
+                    # Link the bond to subnet BEFORE creating VLAN interfaces
+                    log.info(f"\nLinking bond '{bond_name}' to subnet '{subnet_name}'...")
+                    try:
+                        link_payload = {
+                            "mode": ip_mode.upper(),
+                            "subnet": target_subnet["id"]
+                        }
                         
-                        # Link the bond to subnet BEFORE creating VLAN interfaces
-                        log.info(f"\nLinking bond '{bond_name}' to subnet '{subnet_name}'...")
-                        try:
-                            link_payload = {
-                                "mode": ip_mode.upper(),
-                                "subnet": target_subnet["id"]
-                            }
-                            
-                            if ip_mode == "static" and ip_address:
-                                link_payload["ip_address"] = ip_address
-                            
-                            retry(
-                                lambda: self.client.request(
-                                    "POST",
-                                    f"nodes/{system_id}/interfaces/{bond['id']}",
-                                    op="link_subnet",
-                                    data=link_payload
-                                ),
-                                retries=self.max_retries,
-                                delay=2.0
-                            )
-                            log.info(f"✓ Linked bond to subnet '{subnet_name}'")
-                            log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
-                            log.info(f"  - IP Mode: {ip_mode}")
-                            if ip_mode == "static" and ip_address:
-                                log.info(f"  - Static IP: {ip_address}")
-                            
-                        except Exception as subnet_error:
-                            log.error(f"✗ Failed to link bond to subnet: {subnet_error}")
-                            log.warning(f"Bond created but subnet linking failed")
+                        if ip_mode == "static" and ip_address:
+                            link_payload["ip_address"] = ip_address
                         
-                except Exception as subnet_error:
-                    log.error(f"✗ Failed to lookup subnet '{subnet_name}': {subnet_error}")
-                    log.warning(f"Bond '{bond_name}' created but subnet lookup failed")
-            elif subnet_name and not ip_mode:
-                log.info(f"⚠ Subnet '{subnet_name}' specified but no ip_mode provided - skipping subnet configuration")
-                log.info(f"  To configure subnet, add 'ip_mode' field with value: 'static', 'dynamic', or 'automatic'")
-            
-            # For multi-VLAN bonds, create VLAN interface for each VLAN ID
-            created_vlan_interfaces = []
-            
-            for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
+                        retry(
+                            lambda: self.client.request(
+                                "POST",
+                                f"nodes/{system_id}/interfaces/{bond['id']}",
+                                op="link_subnet",
+                                data=link_payload
+                            ),
+                            retries=self.max_retries,
+                            delay=2.0
+                        )
+                        log.info(f"✓ Linked bond to subnet '{subnet_name}'")
+                        log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
+                        log.info(f"  - IP Mode: {ip_mode}")
+                        if ip_mode == "static" and ip_address:
+                            log.info(f"  - Static IP: {ip_address}")
+                        
+                    except Exception as subnet_error:
+                        log.error(f"✗ Failed to link bond to subnet: {subnet_error}")
+                        log.warning(f"Bond created but subnet linking failed")
+                    
+            except Exception as subnet_error:
+                log.error(f"✗ Failed to lookup subnet '{subnet_name}': {subnet_error}")
+                log.warning(f"Bond '{bond_name}' created but subnet lookup failed")
+        elif subnet_name and not ip_mode:
+            log.info(f"⚠ Subnet '{subnet_name}' specified but no ip_mode provided - skipping subnet configuration")
+            log.info(f"  To configure subnet, add 'ip_mode' field with value: 'static', 'dynamic', or 'automatic'")
+        
+        # For multi-VLAN bonds, create VLAN interface for each VLAN ID
+        created_vlan_interfaces = []
+        
+        for vlan_idx, vlan_tag in enumerate(vlan_ids, 1):
                 log.info(f"\n{'='*60}")
                 log.info(f"Creating VLAN interface {vlan_idx}/{len(vlan_ids)} for VLAN {vlan_tag}")
                 log.info(f"{'='*60}")
