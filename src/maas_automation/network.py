@@ -758,7 +758,9 @@ class NetworkManager:
                         log.info(f"    Linking VLAN interface '{vlan_iface.get('name')}' to subnet...")
                         
                         # Use ip_mode from bond config if specified, otherwise default to AUTO
-                        vlan_ip_mode = bond_config.get("ip_mode", "auto").upper()
+                        config_ip_mode = bond_config.get("ip_mode", "auto")
+                        log.info(f"    IP mode from config: '{config_ip_mode}'")
+                        vlan_ip_mode = config_ip_mode.upper()
                         vlan_ip_address = bond_config.get("ip_address") if vlan_ip_mode == "STATIC" else None
                         
                         # Normalize ip_mode values (handle 'automatic', 'dhcp', 'dynamic')
@@ -772,7 +774,7 @@ class NetworkManager:
                             "subnet": subnet["id"]
                         }
                         
-                        log.info(f"    IP Mode: {vlan_ip_mode}")
+                        log.info(f"    Normalized IP Mode for MAAS API: {vlan_ip_mode}")
                         if vlan_ip_mode == "STATIC" and vlan_ip_address:
                             link_payload["ip_address"] = vlan_ip_address
                             log.info(f"    Static IP: {vlan_ip_address}")
@@ -799,7 +801,7 @@ class NetworkManager:
                     else:
                         log.warning(f"  ⚠ No subnet found for VLAN VID {vlan_tag}")
                         log.warning(f"    VLAN interface '{vlan_iface.get('name')}' created but not linked to any subnet")
-                    log.warning(f"    You may need to manually configure the subnet in MAAS or ensure a subnet exists for VLAN {vlan_tag}")
+                        log.warning(f"    You may need to manually configure the subnet in MAAS or ensure a subnet exists for VLAN {vlan_tag}")
                 except Exception as subnet_error:
                     log.error(f"  ✗ Failed to configure subnet for VLAN {vlan_tag}")
                     log.error(f"    Error: {subnet_error}")
