@@ -654,12 +654,19 @@ class NetworkManager:
                     # Link the bond to subnet BEFORE creating VLAN interfaces
                     log.info(f"\nLinking bond '{bond_name}' to subnet '{subnet_name}'...")
                     try:
+                        # Normalize ip_mode values (handle 'automatic', 'dhcp', 'dynamic')
+                        normalized_ip_mode = ip_mode.upper()
+                        if normalized_ip_mode == "AUTOMATIC" or normalized_ip_mode == "DHCP":
+                            normalized_ip_mode = "AUTO"
+                        elif normalized_ip_mode == "DYNAMIC":
+                            normalized_ip_mode = "DHCP"
+                        
                         link_payload = {
-                            "mode": ip_mode.upper(),
+                            "mode": normalized_ip_mode,
                             "subnet": target_subnet["id"]
                         }
                         
-                        if ip_mode == "static" and ip_address:
+                        if normalized_ip_mode == "STATIC" and ip_address:
                             link_payload["ip_address"] = ip_address
                         
                         retry(
@@ -674,8 +681,8 @@ class NetworkManager:
                         )
                         log.info(f"✓ Linked bond to subnet '{subnet_name}'")
                         log.info(f"  - Subnet CIDR: {target_subnet.get('cidr')}")
-                        log.info(f"  - IP Mode: {ip_mode}")
-                        if ip_mode == "static" and ip_address:
+                        log.info(f"  - IP Mode: {normalized_ip_mode} (from config: {ip_mode})")
+                        if normalized_ip_mode == "STATIC" and ip_address:
                             log.info(f"  - Static IP: {ip_address}")
                         
                     except Exception as subnet_error:
