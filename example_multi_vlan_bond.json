@@ -20,7 +20,7 @@
       "cloud_init_file": "user-data.yaml",
       "distro_series": "jammy",
       
-      "_comment_bonds": "Creates bonds with multiple VLAN tags",
+      "_comment_bonds": "Creates bonds with multiple VLAN tags (auto-configures subnets)",
       "bonds": [
         {
           "name": "prov_bond",
@@ -28,7 +28,8 @@
           "mode": "active-backup",
           "mtu": 9000,
           "lacp_rate": "fast",
-          "xmit_hash_policy": "layer3+4"
+          "xmit_hash_policy": "layer3+4",
+          "ip_mode": "dynamic"
         },
         {
           "name": "data_bond",
@@ -36,7 +37,8 @@
           "mode": "802.3ad",
           "mtu": 9000,
           "lacp_rate": "fast",
-          "xmit_hash_policy": "layer2"
+          "xmit_hash_policy": "layer2",
+          "ip_mode": "dynamic"
         }
       ],
       
@@ -68,17 +70,22 @@
     "step_1_find_machine": "Finds the machine by hostname, serial, or PXE MAC",
     
     "step_2_set_network_bond": {
+      "description": "Creates bonds and VLAN interfaces, auto-configures subnets",
       "prov_bond": [
         "Finds physical interfaces with VLAN 1234 (primary VLAN)",
         "Creates bond 'prov_bond' in active-backup mode",
-        "Creates VLAN interface 'prov_bond_1234' for VLAN 1234",
-        "Creates VLAN interface 'prov_bond_1235' for VLAN 1235"
+        "Creates VLAN interface 'prov_bond.1234' for VLAN 1234",
+        "Auto-links to subnet for VLAN 1234 with dynamic IP",
+        "Creates VLAN interface 'prov_bond.1235' for VLAN 1235",
+        "Auto-links to subnet for VLAN 1235 with dynamic IP"
       ],
       "data_bond": [
         "Finds physical interfaces with VLAN 2345",
         "Creates bond 'data_bond' in 802.3ad (LACP) mode",
-        "Creates VLAN interface 'data_bond_2345' for VLAN 2345"
-      ]
+        "Creates VLAN interface 'data_bond.2345' for VLAN 2345",
+        "Auto-links to subnet for VLAN 2345 with dynamic IP"
+      ],
+      "note": "Subnet linking is automatic - no update_interface needed unless changing IP mode"
     },
     
     "step_3_update_interface": {

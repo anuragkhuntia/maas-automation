@@ -163,6 +163,7 @@ Actions run in the order specified:
 - Creates bond with specified mode (802.3ad, active-backup, etc.)
 - Supports multiple VLANs per bond - `vlan_id: [1234, 1235]`
 - Automatically creates VLAN interface for each VLAN tag
+- **✨ Auto-configures subnet** for each VLAN interface
 - ⚠️ **Legacy action** - Use `create_bond` + `add_vlan_to_bond` for new workflows
 - See examples: `example_bond_vlan_workflow.json`, `example_multi_vlan_bond.json`
 - See guide: [MULTI_VLAN_BOND_GUIDE.md](MULTI_VLAN_BOND_GUIDE.md)

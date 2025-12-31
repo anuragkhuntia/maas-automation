@@ -76,19 +76,26 @@ class NetworkManager:
             return None
 
     def find_subnet_by_vlan(self, vlan_id: int) -> Optional[Dict]:
-        """Find a subnet that belongs to a specific VLAN"""
+        """Find a subnet that belongs to a specific VLAN VID"""
         try:
             subnets = self.client.request("GET", "subnets/")
+            log.debug(f"Searching for subnet with VLAN VID {vlan_id} among {len(subnets)} subnets")
+            
             for subnet in subnets:
                 subnet_vlan = subnet.get("vlan")
                 if subnet_vlan and isinstance(subnet_vlan, dict):
-                    if subnet_vlan.get("vid") == vlan_id:
-                        log.debug(f"Found subnet for VLAN {vlan_id}: {subnet.get('cidr')} (ID: {subnet['id']})")
+                    vlan_vid = subnet_vlan.get("vid")
+                    subnet_cidr = subnet.get('cidr', 'N/A')
+                    log.debug(f"  Checking subnet {subnet_cidr}: VLAN VID = {vlan_vid}")
+                    
+                    if vlan_vid == vlan_id:
+                        log.info(f"✓ Found subnet for VLAN VID {vlan_id}: {subnet.get('cidr')} (Subnet ID: {subnet['id']}, Name: {subnet.get('name', 'N/A')})")
                         return subnet
-            log.debug(f"No subnet found for VLAN {vlan_id}")
+            
+            log.warning(f"No subnet found for VLAN VID {vlan_id}")
             return None
         except Exception as e:
-            log.error(f"Failed to search for subnet with VLAN {vlan_id}: {e}")
+            log.error(f"Failed to search for subnet with VLAN VID {vlan_id}: {e}")
             return None
 
     def _find_interfaces_by_vlan(self, system_id: str, vlan_id: int) -> List[str]:
@@ -369,13 +376,14 @@ class NetworkManager:
     def configure_bond_by_vlan(self, system_id: str, bond_config: Dict) -> Dict:
         """
         Configure a network bond by finding interfaces with a specific VLAN ID or multiple VLANs.
+        Automatically configures subnets for each VLAN.
         
         This method:
         1. Takes VLAN ID(s) from the bond configuration (single int or list)
         2. Finds all interfaces where the VLAN(s) is/are visible
         3. Creates a bond between those interfaces
         4. If multiple VLANs specified, creates VLAN interfaces for each VLAN
-        5. Optionally links to subnet if provided
+        5. Automatically links each VLAN interface to its subnet
         
         Args:
             system_id: Machine system ID
@@ -384,22 +392,24 @@ class NetworkManager:
                 - vlan_id: VLAN ID (int) or list of VLAN IDs [int, int, ...]
                 - mode: Bond mode (e.g., "802.3ad", "active-backup", "balance-rr")
                 - mtu: MTU size (optional, default: 1500)
-                - subnet: Subnet name to link both interfaces to (optional)
-                - ip_mode: "static", "dynamic", or "automatic" (optional, default: "automatic")
+                - ip_mode: IP assignment: "auto", "dynamic", or "static" (optional, default: "auto")
                 - ip_address: Static IP if ip_mode is "static" (optional)
+                - subnet: Subnet name to link bond to (optional, for backwards compatibility)
         
-        Example config (single VLAN):
+        Example config (single VLAN with auto-subnet):
         {
             "name": "bond0",
             "vlan_id": 100,
-            "mode": "802.3ad"
+            "mode": "802.3ad",
+            "ip_mode": "dynamic"
         }
         
-        Example config (multiple VLANs):
+        Example config (multiple VLANs with auto-subnet):
         {
             "name": "prov_bond",
             "vlan_id": [1234, 1235],
-            "mode": "active-backup"
+            "mode": "active-backup",
+            "ip_mode": "dynamic"
         }
         
         Returns:
@@ -593,12 +603,41 @@ class NetworkManager:
             log.info(f"  - Parent Interfaces: {', '.join(matching_interfaces)}")
             log.info(f"  - Parent IDs: {', '.join(map(str, interface_ids))}")
             log.info("=" * 60)
+        except Exception as create_error:
+            error_msg = str(create_error)
+            log.error("=" * 60)
+            log.error(f"✗ FAILED TO CREATE BOND '{bond_name}'")
+            log.error("=" * 60)
+            log.error(f"System ID: {system_id}")
+            log.error(f"Bond Name: {bond_name}")
+            log.error(f"Bond Mode: {bond_mode}")
+            log.error(f"Parent Interfaces: {', '.join(matching_interfaces)}")
+            log.error(f"Parent Interface IDs: {', '.join(map(str, interface_ids))}")
+            log.error(f"Error Type: {type(create_error).__name__}")
+            log.error(f"Error Message: {error_msg}")
             
-            # Get subnet configuration if specified
-            subnet_name = bond_config.get("subnet")
-            ip_mode = bond_config.get("ip_mode")
-            ip_address = bond_config.get("ip_address")
-            target_subnet = None
+            # Check for common errors
+            if "already" in error_msg.lower() or "exists" in error_msg.lower() or "duplicate" in error_msg.lower():
+                log.error("")
+                log.error("REASON: A bond with this name or configuration already exists")
+                log.error("SOLUTION: Either delete the existing bond first, or use a different bond name")
+                raise ValueError(f"Bond '{bond_name}' already exists on machine {system_id}")
+            elif "parent" in error_msg.lower() or "interface" in error_msg.lower():
+                log.error("")
+                log.error("REASON: One or more parent interfaces may be unavailable or already in use")
+                log.error("SOLUTION: Check that all interfaces exist and are not already part of another bond")
+                raise ValueError(f"Failed to create bond '{bond_name}': Parent interface issue - {error_msg}")
+            else:
+                log.error("")
+                log.error("SOLUTION: Check MAAS logs for more details and verify the interfaces are in the correct state")
+                log.error("=" * 60)
+                raise ValueError(f"Failed to create bond '{bond_name}': {error_msg}")
+        
+        # Get subnet configuration if specified
+        subnet_name = bond_config.get("subnet")
+        ip_mode = bond_config.get("ip_mode")
+        ip_address = bond_config.get("ip_address")
+        target_subnet = None
             
             if subnet_name and ip_mode:
                 log.info(f"\nLooking up subnet '{subnet_name}' for bond configuration...")
@@ -702,6 +741,63 @@ class NetworkManager:
                     log.info(f"  - VLAN Interface ID: {vlan_iface.get('id')}")
                     log.info(f"  - VLAN Interface Name: {vlan_iface.get('name')}")
                     log.info(f"  - Expected name format: {bond_name}.{vlan_tag}")
+                    
+                    # Auto-configure subnet for this VLAN
+                    log.info(f"\nStep 3: Auto-configuring subnet for VLAN VID {vlan_tag}...")
+                    try:
+                        subnet = self.find_subnet_by_vlan(vlan_tag)
+                        if subnet:
+                            log.info(f"  ✓ Found subnet: {subnet.get('cidr')} (Subnet ID: {subnet['id']}, Name: {subnet.get('name', 'N/A')})")
+                            log.info(f"    Linking VLAN interface '{vlan_iface.get('name')}' to subnet...")
+                            
+                            # Use ip_mode from bond config if specified, otherwise default to AUTO
+                            vlan_ip_mode = bond_config.get("ip_mode", "auto").upper()
+                            vlan_ip_address = bond_config.get("ip_address") if vlan_ip_mode == "STATIC" else None
+                            
+                            # Normalize ip_mode values (handle 'automatic', 'dhcp', 'dynamic')
+                            if vlan_ip_mode == "AUTOMATIC" or vlan_ip_mode == "DHCP":
+                                vlan_ip_mode = "AUTO"
+                            elif vlan_ip_mode == "DYNAMIC":
+                                vlan_ip_mode = "DHCP"
+                            
+                            link_payload = {
+                                "mode": vlan_ip_mode,
+                                "subnet": subnet["id"]
+                            }
+                            
+                            log.info(f"    IP Mode: {vlan_ip_mode}")
+                            if vlan_ip_mode == "STATIC" and vlan_ip_address:
+                                link_payload["ip_address"] = vlan_ip_address
+                                log.info(f"    Static IP: {vlan_ip_address}")
+                            
+                            try:
+                                link_result = retry(
+                                    lambda: self.client.request(
+                                        "POST",
+                                        f"nodes/{system_id}/interfaces/{vlan_iface['id']}",
+                                        op="link_subnet",
+                                        data=link_payload
+                                    ),
+                                    retries=self.max_retries,
+                                    delay=2.0
+                                )
+                                log.info(f"    ✓ Successfully linked VLAN interface to subnet")
+                                log.info(f"      Interface: {vlan_iface.get('name')}")
+                                log.info(f"      Subnet: {subnet.get('cidr')}")
+                                log.info(f"      Mode: {vlan_ip_mode}")
+                            except Exception as link_error:
+                                log.error(f"    ✗ Failed to link VLAN interface to subnet")
+                                log.error(f"      Error: {link_error}")
+                                raise
+                        else:
+                            log.warning(f"  ⚠ No subnet found for VLAN VID {vlan_tag}")
+                            log.warning(f"    VLAN interface '{vlan_iface.get('name')}' created but not linked to any subnet")
+                            log.warning(f"    You may need to manually configure the subnet in MAAS or ensure a subnet exists for VLAN {vlan_tag}")
+                    except Exception as subnet_error:
+                        log.error(f"  ✗ Failed to configure subnet for VLAN {vlan_tag}")
+                        log.error(f"    Error: {subnet_error}")
+                        log.warning(f"    VLAN interface '{vlan_iface.get('name')}' created but subnet was not configured")
+                        log.warning(f"    You can manually link the subnet using the 'update_interface' action")
                     
                     created_vlan_interfaces.append(vlan_iface)
                     

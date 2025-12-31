@@ -343,31 +343,52 @@ class Controller:
                 for idx, bond_cfg in enumerate(bonds_cfg, 1):
                     bond_name = bond_cfg.get('name', f'bond#{idx}')
                     try:
-                        log.info(f"Configuring bond {idx}/{len(bonds_cfg)}: {bond_name}")
+                        log.info(f"\nConfiguring bond {idx}/{len(bonds_cfg)}: {bond_name}")
+                        log.info("-" * 60)
                         self.network.configure_bond_by_vlan(system_id, bond_cfg)
                         log.info(f"✓ Successfully configured bond: {bond_name}")
                     except ValueError as e:
                         # Handle "already exists" errors without failing
                         error_msg = str(e)
-                        if "already exists" in error_msg:
-                            log.warning(f"Bond '{bond_name}' already exists - skipping")
+                        if "already exists" in error_msg.lower():
+                            log.warning(f"\n⚠️  Bond '{bond_name}' already exists on this machine")
+                            log.warning(f"   Skipping bond creation for '{bond_name}'")
                             skipped_bonds.append(bond_name)
                         else:
-                            error_msg = f"Failed to configure bond {bond_name}: {e}"
-                            log.error(error_msg)
-                            bond_errors.append(error_msg)
+                            log.error(f"\n✗ Failed to configure bond '{bond_name}'")
+                            log.error(f"  Reason: {e}")
+                            bond_errors.append(f"{bond_name}: {e}")
                     except Exception as e:
-                        error_msg = f"Failed to configure bond {bond_name}: {e}"
-                        log.error(error_msg)
-                        bond_errors.append(error_msg)
+                        log.error(f"\n✗ Failed to configure bond '{bond_name}'")
+                        log.error(f"  Reason: {e}")
+                        bond_errors.append(f"{bond_name}: {e}")
                 
                 # Summary
+                log.info("\n" + "=" * 60)
+                log.info("BOND CONFIGURATION SUMMARY")
+                log.info("=" * 60)
+                
+                total_bonds = len(bonds_cfg)
+                successful_bonds = total_bonds - len(bond_errors) - len(skipped_bonds)
+                
+                if successful_bonds > 0:
+                    log.info(f"✓ Successfully configured: {successful_bonds} bond(s)")
+                
                 if skipped_bonds:
-                    log.info(f"⚠️  Skipped {len(skipped_bonds)} existing bond(s): {', '.join(skipped_bonds)}")
+                    log.warning(f"⚠️  Skipped (already exist): {len(skipped_bonds)} bond(s)")
+                    for bond_name in skipped_bonds:
+                        log.warning(f"   - {bond_name}")
+                
+                if bond_errors:
+                    log.error(f"✗ Failed: {len(bond_errors)} bond(s)")
+                    for error in bond_errors:
+                        log.error(f"   - {error}")
+                
+                log.info("=" * 60)
                 
                 # If any bonds failed (not just skipped), raise an error
                 if bond_errors:
-                    raise Exception(f"Bond configuration failed for {len(bond_errors)} bond(s): " + "; ".join(bond_errors))
+                    raise Exception(f"Bond configuration failed for {len(bond_errors)} bond(s). See errors above for details.")
             log.info("")
 
         # Step 9: Update interface (configure VLAN, subnet, etc.)
