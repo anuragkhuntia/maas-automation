@@ -220,8 +220,10 @@ def main():
     update_parser.add_argument('--json', action='store_true', help='Output as JSON')
     
     # DELETE command
-    delete_parser = subparsers.add_parser('delete', help='Delete a reserved IP')
-    delete_parser.add_argument('--id', type=int, required=True, help='Reserved IP ID')
+    delete_parser = subparsers.add_parser('delete', help='Delete reserved IP(s)')
+    delete_parser.add_argument('--id', type=int, help='Reserved IP ID to delete')
+    delete_parser.add_argument('--subnet', type=int, help='Delete all reserved IPs in this subnet ID')
+    delete_parser.add_argument('--subnet-name', help='Delete all reserved IPs in this subnet name/CIDR')
     delete_parser.add_argument('--confirm', action='store_true', help='Skip confirmation prompt')
     
     args = parser.parse_args()
@@ -381,14 +383,87 @@ def main():
                 print()
         
         elif args.command == 'delete':
-            if not args.confirm:
-                response = input(f"\nAre you sure you want to delete reserved IP {args.id}? (yes/no): ")
-                if response.lower() not in ['yes', 'y']:
-                    print("Cancelled.")
-                    sys.exit(0)
+            # Validate that either --id or --subnet/--subnet-name is provided
+            if not args.id and not args.subnet and not args.subnet_name:
+                print("\n✗ Must provide either --id or --subnet/--subnet-name")
+                sys.exit(1)
             
-            client.delete_reserved_ip(args.id)
-            print(f"\n✓ Reserved IP {args.id} deleted successfully!\n")
+            if args.id:
+                # Delete single reserved IP by ID
+                if not args.confirm:
+                    response = input(f"\nAre you sure you want to delete reserved IP {args.id}? (yes/no): ")
+                    if response.lower() not in ['yes', 'y']:
+                        print("Cancelled.")
+                        sys.exit(0)
+                
+                client.delete_reserved_ip(args.id)
+                print(f"\n✓ Reserved IP {args.id} deleted successfully!\n")
+            
+            else:
+                # Delete all reserved IPs in a subnet
+                reserved_ips = client.list_reserved_ips()
+                
+                # Determine subnet ID
+                subnet_id = args.subnet
+                subnet_name = None
+                if args.subnet_name:
+                    subnets = client.list_subnets()
+                    for subnet in subnets:
+                        if subnet.get('name') == args.subnet_name or subnet.get('cidr') == args.subnet_name:
+                            subnet_id = subnet.get('id')
+                            subnet_name = f"{subnet.get('name')} ({subnet.get('cidr')})"
+                            break
+                    
+                    if subnet_id is None:
+                        print(f"\n✗ Subnet '{args.subnet_name}' not found")
+                        sys.exit(1)
+                else:
+                    subnet_name = f"ID {subnet_id}"
+                
+                # Filter reserved IPs by subnet
+                ips_to_delete = []
+                for ip_data in reserved_ips:
+                    subnet = ip_data.get('subnet', {})
+                    if isinstance(subnet, dict):
+                        if subnet.get('id') == subnet_id:
+                            ips_to_delete.append(ip_data)
+                    elif subnet == subnet_id:
+                        ips_to_delete.append(ip_data)
+                
+                if not ips_to_delete:
+                    print(f"\n✗ No reserved IPs found in subnet {subnet_name}\n")
+                    sys.exit(0)
+                
+                # Show what will be deleted
+                print(f"\n{'=' * 80}")
+                print(f"Found {len(ips_to_delete)} reserved IP(s) to delete in subnet {subnet_name}:")
+                print(f"{'=' * 80}")
+                for ip_data in ips_to_delete:
+                    print(f"  ID {ip_data.get('id')}: {ip_data.get('ip')} (MAC: {ip_data.get('mac_address')})")
+                print(f"{'=' * 80}")
+                
+                if not args.confirm:
+                    response = input(f"\nAre you sure you want to delete ALL {len(ips_to_delete)} reserved IP(s)? (yes/no): ")
+                    if response.lower() not in ['yes', 'y']:
+                        print("Cancelled.")
+                        sys.exit(0)
+                
+                # Delete all
+                success_count = 0
+                failed_count = 0
+                for ip_data in ips_to_delete:
+                    ip_id = ip_data.get('id')
+                    try:
+                        client.delete_reserved_ip(ip_id)
+                        print(f"✓ Deleted reserved IP {ip_id} ({ip_data.get('ip')})")
+                        success_count += 1
+                    except Exception as e:
+                        print(f"✗ Failed to delete reserved IP {ip_id}: {e}")
+                        failed_count += 1
+                
+                print(f"\n{'=' * 80}")
+                print(f"Summary: {success_count} deleted, {failed_count} failed")
+                print(f"{'=' * 80}\n")
     
     except Exception as e:
         print(f"\n✗ Error: {e}\n")
