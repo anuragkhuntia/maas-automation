@@ -31,6 +31,9 @@ Usage (with CLI args):
 import argparse
 import json
 import sys
+import time
+import random
+import string
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -44,13 +47,34 @@ class MAASClient:
         self.api_url = api_url.rstrip('/')
         self.api_key = api_key
         
+        # Parse API key
+        parts = api_key.split(':')
+        if len(parts) != 3:
+            raise ValueError("API key must be in format: consumer:token:secret")
+        self.consumer, self.token, self.secret = parts
+    
+    def _build_oauth_header(self) -> str:
+        """Build OAuth PLAINTEXT authorization header for MAAS"""
+        oauth = {
+            "oauth_consumer_key": self.consumer,
+            "oauth_token": self.token,
+            "oauth_signature_method": "PLAINTEXT",
+            "oauth_signature": f"&{self.secret}",
+            "oauth_timestamp": str(int(time.time())),
+            "oauth_nonce": ''.join(random.choices(string.ascii_letters + string.digits, k=32)),
+            "oauth_version": "1.0"
+        }
+        
+        return "OAuth " + ", ".join(f'{k}="{v}"' for k, v in oauth.items())
+        
     def _make_request(self, endpoint: str, method: str = 'GET', data: Optional[Dict] = None) -> any:
         """Make authenticated request to MAAS API"""
         url = f"{self.api_url}/api/2.0/{endpoint}"
         
         # Prepare request
         headers = {
-            'Authorization': f'OAuth oauth_version="1.0", oauth_signature_method="PLAINTEXT", oauth_consumer_key="{self.api_key.split(":")[0]}", oauth_token="{self.api_key.split(":")[1]}", oauth_signature="&{self.api_key.split(":")[2]}"'
+            'Authorization': self._build_oauth_header(),
+            'Accept': 'application/json'
         }
         
         # Encode data for POST/PUT/DELETE
